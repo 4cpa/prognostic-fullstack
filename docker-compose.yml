@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:15
@@ -5,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: prognostic
-      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: prognosticdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -19,7 +21,7 @@ services:
     depends_on:
       - postgres
     environment:
-      DATABASE_URL: postgresql://prognostic:strongpassword@postgres:5432/prognosticdb
+      DATABASE_URL: postgresql://prognostic:${POSTGRES_PASSWORD}@postgres:5432/prognosticdb
     ports:
       - "127.0.0.1:8000:8000"
     mem_limit: 512m
