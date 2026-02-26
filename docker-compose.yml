@@ -1,18 +1,40 @@
-version: "3.8"
-
 services:
+  postgres:
+    image: postgres:15
+    container_name: forecast-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prognostic
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: prognosticdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 1g
+    cpus: 1.0
+
   backend:
-    build: ./backend
+    image: ghcr.io/4cpa/prognostic-backend:latest
     container_name: forecast-backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://prognostic:strongpassword@postgres:5432/prognosticdb
     ports:
-      - "8000:8000"
-    restart: always
+      - "127.0.0.1:8000:8000"
+    mem_limit: 512m
+    cpus: 0.5
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/4cpa/prognostic-frontend:latest
     container_name: forecast-frontend
-    ports:
-      - "3000:3000"
-    restart: always
+    restart: unless-stopped
     depends_on:
       - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 512m
+    cpus: 0.5
+
+volumes:
+  postgres_data:
