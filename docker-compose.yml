@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: prognosticdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     mem_limit: 1g
     cpus: 1.0
 
