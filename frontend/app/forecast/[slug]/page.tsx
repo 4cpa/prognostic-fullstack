@@ -24,39 +24,6 @@ type ForecastRead = {
 };
 
 function apiBase(): string {
-  // SSR im Container -> backend service
-  return process.env.API_BASE_URL || "http://backend:8000";
-import { notFound } from "next/navigation";
-
-export const dynamic = "force-dynamic";
-export const dynamicParams = true;
-export const revalidate = 0;
-
-type QuestionCreate = {
-  title: string;
-  description: string;
-  category?: string;
-  region?: string | null;
-  country?: string | null;
-  resolve_at: string;
-  resolution_criteria: string;
-  resolution_source_policy?: string;
-};
-
-type ForecastRead = {
-  id: string;
-  question_id: string;
-  created_at: string;
-  probability: number;
-  confidence?: number | null;
-  method: string;
-  method_version: string;
-  explanation_md: string;
-  inputs_hash: string;
-};
-
-function apiBase(): string {
-  // SSR im Container -> backend service
   return process.env.API_BASE_URL || "http://backend:8000";
 }
 
@@ -73,7 +40,6 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
   const base = apiBase();
   const title = humanizeSlug(slug);
 
-  // default: 1 Jahr in der Zukunft
   const resolveAt = new Date(
     Date.now() + 365 * 24 * 60 * 60 * 1000
   ).toISOString();
@@ -86,7 +52,8 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
     country: null,
     resolve_at: resolveAt,
     resolution_criteria: "Auto-generated (to be refined).",
-    resolution_source_policy: "official + 1 major wire (Reuters/AP/AFP)",
+    resolution_source_policy:
+      "official + 1 major wire (Reuters/AP/AFP)",
   };
 
   const res = await fetch(`${base}/questions`, {
@@ -98,39 +65,57 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Fehler beim Erstellen der Frage (${res.status}): ${txt}`);
+    throw new Error(
+      `Fehler beim Erstellen der Frage (${res.status}): ${txt}`
+    );
   }
 
   return res.json();
 }
 
-async function createForecast(questionId: string): Promise<ForecastRead> {
+async function createForecast(
+  questionId: string
+): Promise<ForecastRead> {
   const base = apiBase();
 
-  const res = await fetch(`${base}/questions/${questionId}/forecast`, {
-    method: "POST",
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `${base}/questions/${questionId}/forecast`,
+    {
+      method: "POST",
+      cache: "no-store",
+    }
+  );
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Fehler beim Laden der Prognose (${res.status}): ${txt}`);
+    throw new Error(
+      `Fehler beim Laden der Prognose (${res.status}): ${txt}`
+    );
   }
 
   return res.json();
+}
+
+async function getSlug(params: unknown): Promise<string | undefined> {
+  const p: any = await Promise.resolve(params as any);
+  const slug = p?.slug;
+
+  if (typeof slug === "string") return slug;
+  if (Array.isArray(slug) && typeof slug[0] === "string")
+    return slug[0];
+
+  return undefined;
 }
 
 export default async function ForecastPage({
   params,
 }: {
-  params: { slug?: string };
+  params: unknown;
 }) {
-  const slug = params?.slug;
+  const slug = await getSlug(params);
 
-  // verhindert /forecast/undefined + stoppt SSR-Loops sauber
   if (!slug || slug === "undefined") notFound();
 
-  // NOTE: Ohne "slug -> question_id" Mapping erzeugen wir vorerst pro slug eine neue Question.
   const q = await createQuestionFromSlug(slug);
   const f = await createForecast(q.id);
 
@@ -138,7 +123,8 @@ export default async function ForecastPage({
     <div className="min-h-screen p-10 bg-gray-50">
       <h1 className="text-3xl font-bold mb-2">Prognose</h1>
       <p className="text-gray-600 mb-8">
-        Slug: <span className="font-mono">{slug}</span> — Question ID:{" "}
+        Slug: <span className="font-mono">{slug}</span> —
+        Question ID:{" "}
         <span className="font-mono">{q.id}</span>
       </p>
 
@@ -148,7 +134,9 @@ export default async function ForecastPage({
         </p>
 
         {f.confidence != null && (
-          <p className="text-gray-700 mb-4">Confidence: {f.confidence}</p>
+          <p className="text-gray-700 mb-4">
+            Confidence: {f.confidence}
+          </p>
         )}
 
         <p className="text-sm text-gray-500 mb-4">
@@ -156,8 +144,9 @@ export default async function ForecastPage({
         </p>
 
         <div className="prose max-w-none">
-          {/* explanation_md ist Markdown; fürs Erste plain anzeigen */}
-          <pre className="whitespace-pre-wrap">{f.explanation_md}</pre>
+          <pre className="whitespace-pre-wrap">
+            {f.explanation_md}
+          </pre>
         </div>
       </div>
     </div>
