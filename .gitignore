@@ -2,3 +2,14 @@ __pycache__/
 *.pyc
 .env
 node_modules/
+
+# editor backups
+*$
+*.swp
+*.swo
+*~
+
+# temp folders
+tmp_alembic/
+__pycache__/
+*.pyc
