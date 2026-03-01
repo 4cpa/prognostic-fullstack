@@ -26,6 +26,38 @@ type ForecastRead = {
 function apiBase(): string {
   // SSR im Container -> backend service
   return process.env.API_BASE_URL || "http://backend:8000";
+import { notFound } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+export const dynamicParams = true;
+export const revalidate = 0;
+
+type QuestionCreate = {
+  title: string;
+  description: string;
+  category?: string;
+  region?: string | null;
+  country?: string | null;
+  resolve_at: string;
+  resolution_criteria: string;
+  resolution_source_policy?: string;
+};
+
+type ForecastRead = {
+  id: string;
+  question_id: string;
+  created_at: string;
+  probability: number;
+  confidence?: number | null;
+  method: string;
+  method_version: string;
+  explanation_md: string;
+  inputs_hash: string;
+};
+
+function apiBase(): string {
+  // SSR im Container -> backend service
+  return process.env.API_BASE_URL || "http://backend:8000";
 }
 
 function humanizeSlug(slug: string) {
@@ -42,7 +74,9 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
   const title = humanizeSlug(slug);
 
   // default: 1 Jahr in der Zukunft
-  const resolveAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const resolveAt = new Date(
+    Date.now() + 365 * 24 * 60 * 60 * 1000
+  ).toISOString();
 
   const payload: QuestionCreate = {
     title,
@@ -112,6 +146,7 @@ export default async function ForecastPage({
         <p className="text-xl font-semibold mb-4">
           Wahrscheinlichkeit: {f.probability}%
         </p>
+
         {f.confidence != null && (
           <p className="text-gray-700 mb-4">Confidence: {f.confidence}</p>
         )}
