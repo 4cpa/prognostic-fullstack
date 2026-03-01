@@ -15,7 +15,9 @@ services:
     cpus: 1.0
 
   backend:
-    image: ghcr.io/4cpa/prognostic-backend:latest
+    build:
+      context: .
+    image: prognostic-backend:local
     container_name: forecast-backend
     restart: unless-stopped
     depends_on:
