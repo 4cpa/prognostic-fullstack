@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic"; // vermeidet Static/Prerender-Fallen bei fetch no-store
+
 type QuestionCreate = {
   title: string;
   description: string;
@@ -24,6 +26,7 @@ type ForecastRead = {
 };
 
 function apiBase(): string {
+  // SSR im Container -> backend service
   return process.env.API_BASE_URL || "http://backend:8000";
 }
 
@@ -40,9 +43,7 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
   const base = apiBase();
   const title = humanizeSlug(slug);
 
-  const resolveAt = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000
-  ).toISOString();
+  const resolveAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
   const payload: QuestionCreate = {
     title,
@@ -52,8 +53,7 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
     country: null,
     resolve_at: resolveAt,
     resolution_criteria: "Auto-generated (to be refined).",
-    resolution_source_policy:
-      "official + 1 major wire (Reuters/AP/AFP)",
+    resolution_source_policy: "official + 1 major wire (Reuters/AP/AFP)",
   };
 
   const res = await fetch(`${base}/questions`, {
@@ -65,54 +65,36 @@ async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(
-      `Fehler beim Erstellen der Frage (${res.status}): ${txt}`
-    );
+    throw new Error(`Fehler beim Erstellen der Frage (${res.status}): ${txt}`);
   }
 
   return res.json();
 }
 
-async function createForecast(
-  questionId: string
-): Promise<ForecastRead> {
+async function createForecast(questionId: string): Promise<ForecastRead> {
   const base = apiBase();
 
-  const res = await fetch(
-    `${base}/questions/${questionId}/forecast`,
-    {
-      method: "POST",
-      cache: "no-store",
-    }
-  );
+  const res = await fetch(`${base}/questions/${questionId}/forecast`, {
+    method: "POST",
+    cache: "no-store",
+  });
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(
-      `Fehler beim Laden der Prognose (${res.status}): ${txt}`
-    );
+    throw new Error(`Fehler beim Laden der Prognose (${res.status}): ${txt}`);
   }
 
   return res.json();
-}
-
-async function getSlug(params: unknown): Promise<string | undefined> {
-  const p: any = await Promise.resolve(params as any);
-  const slug = p?.slug;
-
-  if (typeof slug === "string") return slug;
-  if (Array.isArray(slug) && typeof slug[0] === "string")
-    return slug[0];
-
-  return undefined;
 }
 
 export default async function ForecastPage({
   params,
 }: {
-  params: unknown;
+  // Next 15/16: params kann Promise sein
+  params: Promise<{ slug?: string }> | { slug?: string };
 }) {
-  const slug = await getSlug(params);
+  const resolved = await Promise.resolve(params);
+  const slug = resolved?.slug;
 
   if (!slug || slug === "undefined") notFound();
 
@@ -123,8 +105,7 @@ export default async function ForecastPage({
     <div className="min-h-screen p-10 bg-gray-50">
       <h1 className="text-3xl font-bold mb-2">Prognose</h1>
       <p className="text-gray-600 mb-8">
-        Slug: <span className="font-mono">{slug}</span> —
-        Question ID:{" "}
+        Slug: <span className="font-mono">{slug}</span> — Question ID:{" "}
         <span className="font-mono">{q.id}</span>
       </p>
 
@@ -134,9 +115,7 @@ export default async function ForecastPage({
         </p>
 
         {f.confidence != null && (
-          <p className="text-gray-700 mb-4">
-            Confidence: {f.confidence}
-          </p>
+          <p className="text-gray-700 mb-4">Confidence: {f.confidence}</p>
         )}
 
         <p className="text-sm text-gray-500 mb-4">
@@ -144,9 +123,7 @@ export default async function ForecastPage({
         </p>
 
         <div className="prose max-w-none">
-          <pre className="whitespace-pre-wrap">
-            {f.explanation_md}
-          </pre>
+          <pre className="whitespace-pre-wrap">{f.explanation_md}</pre>
         </div>
       </div>
     </div>
