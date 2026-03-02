@@ -30,7 +30,10 @@ services:
     cpus: 0.5
 
   frontend:
-    image: ghcr.io/4cpa/prognostic-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: prognostic-frontend:local
     container_name: forecast-frontend
     restart: unless-stopped
     depends_on:
