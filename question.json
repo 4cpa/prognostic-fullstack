@@ -1,0 +1,7 @@
+{
+  "title": "Will the UN exist on 28 Feb 2028?",
+  "description": "UN exists if Charter in force and GA operational.",
+  "category": "politics",
+  "resolve_at": "2028-02-28T00:00:00Z",
+  "resolution_criteria": "Charter in force and GA operational."
+}
