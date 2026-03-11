@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic"; // vermeidet Static/Prerender-Fallen bei fetch no-store
+export const dynamic = "force-dynamic";
 
 type QuestionCreate = {
   title: string;
@@ -17,8 +17,8 @@ type ForecastRead = {
   id: string;
   question_id: string;
   created_at: string;
-  probability: number;
-  confidence?: number | null;
+  probability: number; // erwartet 0..1 aus dem Backend
+  confidence?: number | null; // 0..100
   method: string;
   method_version: string;
   explanation_md: string;
@@ -26,11 +26,10 @@ type ForecastRead = {
 };
 
 function apiBase(): string {
-  // SSR im Container -> backend service
   return process.env.API_BASE_URL || "http://backend:8000";
 }
 
-function humanizeSlug(slug: string) {
+function humanizeSlug(slug: string): string {
   try {
     const decoded = decodeURIComponent(slug);
     return decoded.replace(/-/g, " ").trim();
@@ -39,10 +38,25 @@ function humanizeSlug(slug: string) {
   }
 }
 
+function toPercent(probability: number): string {
+  const normalized =
+    probability > 1 ? Math.min(Math.max(probability / 100, 0), 1) : Math.min(Math.max(probability, 0), 1);
+
+  return `${(normalized * 100).toFixed(1)}%`;
+}
+
+function formatConfidence(confidence?: number | null): string | null {
+  if (confidence == null || Number.isNaN(confidence)) {
+    return null;
+  }
+
+  const normalized = Math.min(Math.max(confidence, 0), 100);
+  return `${normalized.toFixed(1)}%`;
+}
+
 async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
   const base = apiBase();
   const title = humanizeSlug(slug);
-
   const resolveAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
   const payload: QuestionCreate = {
@@ -90,35 +104,36 @@ async function createForecast(questionId: string): Promise<ForecastRead> {
 export default async function ForecastPage({
   params,
 }: {
-  // Next 15/16: params kann Promise sein
   params: Promise<{ slug?: string }> | { slug?: string };
 }) {
   const resolved = await Promise.resolve(params);
   const slug = resolved?.slug;
 
-  if (!slug || slug === "undefined") notFound();
+  if (!slug || slug === "undefined") {
+    notFound();
+  }
 
   const q = await createQuestionFromSlug(slug);
   const f = await createForecast(q.id);
 
   return (
-    <div className="min-h-screen p-10 bg-gray-50">
-      <h1 className="text-3xl font-bold mb-2">Prognose</h1>
-      <p className="text-gray-600 mb-8">
+    <div className="min-h-screen bg-gray-50 p-10">
+      <h1 className="mb-2 text-3xl font-bold">Prognose</h1>
+      <p className="mb-8 text-gray-600">
         Slug: <span className="font-mono">{slug}</span> — Question ID:{" "}
         <span className="font-mono">{q.id}</span>
       </p>
 
-      <div className="bg-white p-6 rounded-xl shadow-md max-w-2xl mb-8">
-        <p className="text-xl font-semibold mb-4">
-          Wahrscheinlichkeit: {f.probability}%
+      <div className="mb-8 max-w-2xl rounded-xl bg-white p-6 shadow-md">
+        <p className="mb-4 text-xl font-semibold">
+          Wahrscheinlichkeit: {toPercent(f.probability)}
         </p>
 
         {f.confidence != null && (
-          <p className="text-gray-700 mb-4">Confidence: {f.confidence}</p>
+          <p className="mb-4 text-gray-700">Confidence: {formatConfidence(f.confidence)}</p>
         )}
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="mb-4 text-sm text-gray-500">
           Methode: {f.method} ({f.method_version})
         </p>
 
