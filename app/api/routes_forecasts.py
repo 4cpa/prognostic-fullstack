@@ -378,6 +378,8 @@ def get_latest_forecast_full(question_id: str, session: Session = Depends(get_se
     if not forecast:
         raise HTTPException(status_code=404, detail="No forecast found for this question")
 
+    question_text = _build_question_text(question)
+
     sources = session.exec(
         select(ForecastSource)
         .where(ForecastSource.forecast_id == forecast.id)
@@ -419,6 +421,13 @@ def get_latest_forecast_full(question_id: str, session: Session = Depends(get_se
         "net_signal": round(sum(float(c.signed_weight or 0.0) for c in claims), 4),
     }
 
+    runtime_result = compute_probability(
+        category=getattr(question, "category", "default"),
+        evidence=[],
+        question_text=question_text,
+        session=session,
+    )
+
     return {
         "question": {
             "id": getattr(question, "id", None),
@@ -428,12 +437,24 @@ def get_latest_forecast_full(question_id: str, session: Session = Depends(get_se
             "resolution_criteria": getattr(question, "resolution_criteria", None),
             "resolution_source_policy": getattr(question, "resolution_source_policy", None),
         },
-        "forecast": _serialize_forecast(forecast),
+        "forecast": {
+            **_serialize_forecast(forecast),
+            "raw_probability": runtime_result.get("raw_probability"),
+            "calibrated_probability": runtime_result.get("calibrated_probability"),
+            "calibration_signals": runtime_result.get("calibration_signals", []),
+            "runtime_calibration_meta": runtime_result.get("runtime_calibration_meta", {}),
+            "calibration": runtime_result.get("calibration", {}),
+        },
         "summary": _extract_summary_from_explanation(forecast.explanation_md),
         "sources": [_serialize_source(s) for s in sources],
         "claims": [_serialize_claim(c) for c in claims],
         "source_counts": source_counts,
         "claim_counts": claim_counts,
-        "diagnostics": diagnostics,
+        "diagnostics": {
+            **diagnostics,
+            "raw_probability": runtime_result.get("raw_probability"),
+            "calibrated_probability": runtime_result.get("calibrated_probability"),
+            "runtime_calibration_meta": runtime_result.get("runtime_calibration_meta", {}),
+        },
         **buckets,
     }
