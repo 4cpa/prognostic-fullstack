@@ -1,6 +1,7 @@
 import math
 from typing import List, Dict, Any, Optional, Tuple
 
+from app.core.calibration import calibrate_probability
 from app.core.claim_extraction import extract_claims_from_sources
 from app.core.claim_scoring import score_claims
 from app.core.source_research import research_sources_for_question
@@ -34,10 +35,6 @@ def _normalize_text(text: Optional[str]) -> str:
 
 
 def _infer_question_adjustment(category: str, question_text: Optional[str]) -> Tuple[float, List[str]]:
-    """
-    Conservative question-aware prior adjustment.
-    Applies to all questions; a few topic-specific caps exist for obvious outlier cases.
-    """
     base = BASE_RATES.get(category, BASE_RATES["default"])
     text = _normalize_text(question_text)
     signals: List[str] = []
@@ -64,10 +61,6 @@ def _infer_question_adjustment(category: str, question_text: Optional[str]) -> T
 
 
 def _claims_to_logodds_delta(claim_scoring: Dict[str, Any]) -> Tuple[float, List[str]]:
-    """
-    Converts scored claims into a conservative log-odds delta.
-    Positive net_signal increases probability, negative net_signal decreases it.
-    """
     diagnostics = claim_scoring.get("diagnostics", {}) or {}
     net_signal = float(claim_scoring.get("net_signal", 0.0))
     claim_count = int(diagnostics.get("claim_count_scored", 0))
@@ -76,10 +69,7 @@ def _claims_to_logodds_delta(claim_scoring: Dict[str, Any]) -> Tuple[float, List
     if claim_count == 0:
         return 0.0, ["claim_signal: no_scored_claims_available"]
 
-    # Conservative scaling to avoid extreme swings.
     base_delta = net_signal * 0.90
-
-    # Mild trust boost when many claims exist, mild penalty when uncertainty is high.
     count_boost = min(0.25, max(0, claim_count - 3) * 0.02)
     uncertainty_penalty = min(0.30, uncertainty_drag * 0.50)
 
@@ -185,22 +175,54 @@ def _build_summary(question_text: str, probability: float, claim_scoring: Dict[s
     )
 
 
+def _default_calibration_table() -> Dict[str, Any]:
+    """
+    Conservative no-op default.
+    Until backtest-derived calibration data is wired in, this keeps raw and
+    calibrated probability identical while preserving the output contract.
+    """
+    bins = []
+    step = 0.1
+    lower = 0.0
+    for i in range(10):
+        upper = 1.0 if i == 9 else round(lower + step, 6)
+        bins.append(
+            {
+                "bucket": f"{int(lower * 100):02d}-{int(upper * 100):02d}%",
+                "lower": round(lower, 6),
+                "upper": round(upper, 6),
+                "count": 0,
+                "avg_predicted": round((lower + upper) / 2.0, 6),
+                "avg_observed": round((lower + upper) / 2.0, 6),
+                "correction": 0.0,
+            }
+        )
+        lower = upper
+
+    return {
+        "num_bins": 10,
+        "min_bin_count": 3,
+        "count": 0,
+        "avg_abs_gap": 0.0,
+        "bins": bins,
+    }
+
+
+def _load_calibration_table(category: str) -> Dict[str, Any]:
+    """
+    Placeholder hook for future category-specific calibration loading.
+    For now this returns a no-op table so the engine exposes both
+    raw_probability and calibrated_probability without changing behavior.
+    """
+    _ = category
+    return _default_calibration_table()
+
+
 def compute_probability(
     category: str,
     evidence: List[EvidenceItem],
     question_text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Returns probability in 0..1.
-
-    Pipeline:
-    1) question-aware prior
-    2) source research
-    3) claim extraction
-    4) claim scoring
-    5) net claim signal -> log-odds update
-    6) manual evidence -> log-odds update
-    """
     base_rate_raw = BASE_RATES.get(category, BASE_RATES["default"])
     base_rate_adjusted, question_signals = _infer_question_adjustment(category, question_text)
 
@@ -256,7 +278,10 @@ def compute_probability(
     manual_delta, contributions = _manual_evidence_to_logodds(evidence)
     lo += manual_delta
 
-    probability = _sigmoid(lo)
+    raw_probability = _sigmoid(lo)
+
+    calibration_table = _load_calibration_table(category)
+    calibrated_probability = calibrate_probability(raw_probability, calibration_table)
 
     source_count = len(research_bundle.get("sources", []) or [])
     claim_count = len(claim_scoring_bundle.get("scored_claims", []) or [])
@@ -275,13 +300,14 @@ def compute_probability(
     confidence = min(95.0, max(5.0, confidence))
 
     reasoning = _build_reasoning_from_scored_claims(claim_scoring_bundle)
-    summary = _build_summary(question_text or "", probability, claim_scoring_bundle)
+    summary = _build_summary(question_text or "", calibrated_probability, claim_scoring_bundle)
 
     explanation = _build_explanation(
         question_text=question_text or "",
         base_rate_raw=base_rate_raw,
         base_rate_adjusted=base_rate_adjusted,
-        probability=probability,
+        raw_probability=raw_probability,
+        calibrated_probability=calibrated_probability,
         confidence=confidence,
         question_signals=question_signals,
         claim_signals=claim_signals,
@@ -289,14 +315,17 @@ def compute_probability(
         research_bundle=research_bundle,
         extracted_claims_bundle=extracted_claims_bundle,
         claim_scoring_bundle=claim_scoring_bundle,
+        calibration_table=calibration_table,
         reasoning=reasoning,
         summary=summary,
         pipeline_errors=pipeline_errors,
     )
 
     return {
-        "probability": round(probability, 4),  # 0..1
-        "confidence": round(confidence, 2),    # 0..100
+        "probability": round(calibrated_probability, 4),  # compatibility alias
+        "raw_probability": round(raw_probability, 4),
+        "calibrated_probability": round(calibrated_probability, 4),
+        "confidence": round(confidence, 2),
         "base_rate": round(base_rate_adjusted, 4),
         "base_rate_raw": round(base_rate_raw, 4),
         "summary": summary,
@@ -314,7 +343,14 @@ def compute_probability(
         "top_uncertainties": claim_scoring_bundle.get("top_uncertainties", []),
         "top_background": claim_scoring_bundle.get("top_background", []),
         "net_signal": round(float(claim_scoring_bundle.get("net_signal", 0.0)), 4),
-        "diagnostics": claim_scoring_bundle.get("diagnostics", {}),
+        "diagnostics": {
+            **(claim_scoring_bundle.get("diagnostics", {}) or {}),
+            "raw_probability": round(raw_probability, 6),
+            "calibrated_probability": round(calibrated_probability, 6),
+            "calibration_count": int(calibration_table.get("count", 0) or 0),
+            "calibration_avg_abs_gap": float(calibration_table.get("avg_abs_gap", 0.0) or 0.0),
+        },
+        "calibration": calibration_table,
         "contributions": contributions,
         "pipeline_errors": pipeline_errors,
         "explanation_md": explanation,
@@ -326,7 +362,8 @@ def _build_explanation(
     question_text: str,
     base_rate_raw: float,
     base_rate_adjusted: float,
-    probability: float,
+    raw_probability: float,
+    calibrated_probability: float,
     confidence: float,
     question_signals: List[str],
     claim_signals: List[str],
@@ -334,6 +371,7 @@ def _build_explanation(
     research_bundle: Dict[str, Any],
     extracted_claims_bundle: Dict[str, Any],
     claim_scoring_bundle: Dict[str, Any],
+    calibration_table: Dict[str, Any],
     reasoning: Dict[str, List[str]],
     summary: str,
     pipeline_errors: List[str],
@@ -342,7 +380,8 @@ def _build_explanation(
 
     lines.append("### Prognose")
     lines.append(f"- Frage: **{question_text or 'n/a'}**")
-    lines.append(f"- Geschätzte Eintrittswahrscheinlichkeit: **{probability * 100:.2f}%**")
+    lines.append(f"- Rohwahrscheinlichkeit: **{raw_probability * 100:.2f}%**")
+    lines.append(f"- Kalibrierte Eintrittswahrscheinlichkeit: **{calibrated_probability * 100:.2f}%**")
     lines.append(f"- Confidence: **{confidence:.2f}%**")
     lines.append("")
 
@@ -351,11 +390,12 @@ def _build_explanation(
     lines.append("")
 
     lines.append("### Methodik")
-    lines.append("- Methodik: **bayes_logodds_v1 + source_research_v1 + claim_extraction_v1 + claim_scoring_v1**")
+    lines.append("- Methodik: **bayes_logodds_v1 + source_research_v1 + claim_extraction_v1 + claim_scoring_v1 + calibration_v1**")
     lines.append(f"- Base-Rate (Kategorie, roh): **{base_rate_raw * 100:.1f}%**")
     if abs(base_rate_adjusted - base_rate_raw) > 1e-9:
         lines.append(f"- Base-Rate (nach Frage-Signalen): **{base_rate_adjusted * 100:.1f}%**")
-    lines.append(f"- Ergebnis (Posterior): **{probability * 100:.2f}%**")
+    lines.append(f"- Rohwahrscheinlichkeit (vor Kalibrierung): **{raw_probability * 100:.2f}%**")
+    lines.append(f"- Ergebnis (kalibriert): **{calibrated_probability * 100:.2f}%**")
     lines.append(f"- Confidence (Heuristik): **{confidence:.2f}%**")
     lines.append("")
 
@@ -434,6 +474,15 @@ def _build_explanation(
     )
     lines.append("")
 
+    lines.append("### Kalibrierung")
+    lines.append(
+        f"- Kalibrierungsdatensätze: **{int(calibration_table.get('count', 0) or 0)}**"
+    )
+    lines.append(
+        f"- Durchschnittliche absolute Bucket-Abweichung: **{float(calibration_table.get('avg_abs_gap', 0.0) or 0.0):.4f}**"
+    )
+    lines.append("")
+
     queries = research_bundle.get("queries", []) or []
     if queries:
         lines.append("### Suchanfragen")
@@ -499,7 +548,8 @@ def _build_explanation(
 
     lines.append("")
     lines.append("### Hinweis")
-    lines.append("- Diese Version nutzt strukturierte Quellenrecherche, Claim-Extraktion, Claim-Scoring und ein konservatives Log-Odds-Update.")
-    lines.append("- Nächste sinnvolle Ausbaustufen: Volltext-Extraktion, sauberere Claim-Normalisierung, Persistenz für Sources/Claims und echte Kalibrierung mit Brier-Score-Daten.")
+    lines.append("- Diese Version trennt Rohwahrscheinlichkeit und kalibrierte Wahrscheinlichkeit.")
+    lines.append("- Solange noch keine echten Backtest-Daten angebunden sind, ist die Kalibrierung standardmäßig neutral (no-op).")
+    lines.append("- Nächste sinnvolle Ausbaustufen: Backtest-API, persistente Kalibrierungstabellen und kategorie-/horizontspezifische Kalibrierung.")
 
     return "\n".join(lines)
