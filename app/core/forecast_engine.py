@@ -1,7 +1,9 @@
 import math
 from typing import List, Dict, Any, Optional, Tuple
 
-from app.core.source_research import build_summary, research_sources_for_question
+from app.core.claim_extraction import extract_claims_from_sources
+from app.core.claim_scoring import score_claims
+from app.core.source_research import research_sources_for_question
 from app.models.evidence import EvidenceItem
 
 
@@ -32,6 +34,10 @@ def _normalize_text(text: Optional[str]) -> str:
 
 
 def _infer_question_adjustment(category: str, question_text: Optional[str]) -> Tuple[float, List[str]]:
+    """
+    Conservative question-aware prior adjustment.
+    Applies to all questions; a few topic-specific caps exist for obvious outlier cases.
+    """
     base = BASE_RATES.get(category, BASE_RATES["default"])
     text = _normalize_text(question_text)
     signals: List[str] = []
@@ -43,13 +49,13 @@ def _infer_question_adjustment(category: str, question_text: Optional[str]) -> T
 
     if "weltkrieg" in text or "world war" in text:
         adjusted = min(adjusted, 0.05)
-        signals.append("question_signal: world_war -> base capped at 5.0%")
+        signals.append("question_signal: world_war -> prior capped at 5.0%")
 
     if ("eu" in text or "europäische union" in text or "european union" in text) and (
         "zerbrechen" in text or "zerfall" in text or "breakup" in text or "collapse" in text
     ):
         adjusted = min(adjusted, 0.12)
-        signals.append("question_signal: eu_breakup -> base capped at 12.0%")
+        signals.append("question_signal: eu_breakup -> prior capped at 12.0%")
 
     if "ende 2026" in text or "31. dezember 2026" in text or "31 december 2026" in text:
         signals.append("question_signal: explicit_end_2026_horizon")
@@ -57,47 +63,126 @@ def _infer_question_adjustment(category: str, question_text: Optional[str]) -> T
     return adjusted, signals
 
 
-def _research_signal_delta(question_text: Optional[str], research_bundle: Dict[str, Any]) -> Tuple[float, List[str]]:
+def _claims_to_logodds_delta(claim_scoring: Dict[str, Any]) -> Tuple[float, List[str]]:
     """
-    Converts source balance into a small additive log-odds adjustment.
-    Conservative by design: sources should influence, not dominate.
+    Converts scored claims into a conservative log-odds delta.
+    Positive net_signal increases probability, negative net_signal decreases it.
     """
-    if not question_text:
-        return 0.0, []
+    diagnostics = claim_scoring.get("diagnostics", {}) or {}
+    net_signal = float(claim_scoring.get("net_signal", 0.0))
+    claim_count = int(diagnostics.get("claim_count_scored", 0))
+    uncertainty_drag = float(diagnostics.get("uncertainty_drag", 0.0))
 
-    sources = research_bundle.get("sources", []) or []
-    if not sources:
-        return 0.0, ["research_signal: no_sources_available"]
+    if claim_count == 0:
+        return 0.0, ["claim_signal: no_scored_claims_available"]
 
-    pro_weight = 0.0
-    contra_weight = 0.0
-    uncertainty_weight = 0.0
-    signals: List[str] = []
+    # Conservative scaling to avoid extreme swings.
+    base_delta = net_signal * 0.90
 
-    for source in sources:
-        overall = float(source.get("overall_score", 0.0))
-        signal_strength = float(source.get("signal_strength", 0.0))
-        weight = overall * max(signal_strength, 0.10)
-        stance = source.get("stance", "neutral")
+    # Mild trust boost when many claims exist, mild penalty when uncertainty is high.
+    count_boost = min(0.25, max(0, claim_count - 3) * 0.02)
+    uncertainty_penalty = min(0.30, uncertainty_drag * 0.50)
 
-        if stance == "pro":
-            pro_weight += weight
-        elif stance == "contra":
-            contra_weight += weight
-        else:
-            uncertainty_weight += weight
+    delta = base_delta + count_boost - uncertainty_penalty
+    delta = max(-1.50, min(1.50, delta))
 
-    net = pro_weight - contra_weight
-
-    # konservative Kappung, damit Research die Base Rate nicht sprengt
-    delta = max(-1.25, min(1.25, net * 0.60))
-
-    signals.append(
-        f"research_signal: pro_weight={pro_weight:.3f}, contra_weight={contra_weight:.3f}, "
-        f"uncertainty_weight={uncertainty_weight:.3f}, delta={delta:+.3f}"
-    )
+    signals = [
+        (
+            "claim_signal: "
+            f"net_signal={net_signal:+.4f}, "
+            f"claim_count={claim_count}, "
+            f"count_boost={count_boost:+.4f}, "
+            f"uncertainty_penalty={uncertainty_penalty:+.4f}, "
+            f"logodds_delta={delta:+.4f}"
+        )
+    ]
 
     return delta, signals
+
+
+def _manual_evidence_to_logodds(evidence: List[EvidenceItem]) -> Tuple[float, List[Dict[str, Any]]]:
+    delta = 0.0
+    contributions: List[Dict[str, Any]] = []
+
+    for e in evidence:
+        contribution = float(e.direction) * float(e.weight)
+        delta += contribution
+        contributions.append(
+            {
+                "evidence_id": e.id,
+                "indicator_type": e.indicator_type,
+                "direction": float(e.direction),
+                "weight": float(e.weight),
+                "contribution": round(contribution, 4),
+            }
+        )
+
+    return delta, contributions
+
+
+def _build_reasoning_from_scored_claims(claim_scoring: Dict[str, Any]) -> Dict[str, List[str]]:
+    def _fmt(items: List[Dict[str, Any]]) -> List[str]:
+        bullets: List[str] = []
+        for item in items[:5]:
+            text = str(item.get("claim_text", "")).strip()
+            title = str(item.get("source_title", "")).strip()
+            source_type = str(item.get("source_type", "")).strip()
+            weight = float(item.get("final_weight", 0.0))
+            if not text:
+                continue
+            suffix = []
+            if title:
+                suffix.append(title)
+            if source_type:
+                suffix.append(source_type)
+            suffix.append(f"w={weight:.2f}")
+            bullets.append(f"{text} ({', '.join(suffix)})")
+        return bullets
+
+    return {
+        "pro": _fmt(claim_scoring.get("top_pro_claims", []) or []),
+        "contra": _fmt(claim_scoring.get("top_contra_claims", []) or []),
+        "uncertainties": _fmt(claim_scoring.get("top_uncertainties", []) or []),
+        "background": _fmt(claim_scoring.get("top_background", []) or []),
+    }
+
+
+def _build_summary(question_text: str, probability: float, claim_scoring: Dict[str, Any]) -> str:
+    pct = probability * 100.0
+    top_pro = claim_scoring.get("top_pro_claims", []) or []
+    top_contra = claim_scoring.get("top_contra_claims", []) or []
+
+    if pct < 10:
+        qualifier = "derzeit eher unwahrscheinlich"
+    elif pct < 25:
+        qualifier = "derzeit eher nicht wahrscheinlich"
+    elif pct < 40:
+        qualifier = "derzeit möglich, aber unter 50%"
+    elif pct < 60:
+        qualifier = "derzeit ungefähr ausgeglichen"
+    elif pct < 75:
+        qualifier = "derzeit eher wahrscheinlich"
+    else:
+        qualifier = "derzeit klar wahrscheinlich"
+
+    if top_contra:
+        anchor = str(top_contra[0].get("claim_text", "")).strip()
+        return (
+            f"Für die Frage „{question_text}“ erscheint das Ereignis mit {pct:.1f}% {qualifier}. "
+            f"Das stärkste Gegensignal ist derzeit: {anchor}"
+        )
+
+    if top_pro:
+        anchor = str(top_pro[0].get("claim_text", "")).strip()
+        return (
+            f"Für die Frage „{question_text}“ erscheint das Ereignis mit {pct:.1f}% {qualifier}. "
+            f"Das stärkste unterstützende Signal ist derzeit: {anchor}"
+        )
+
+    return (
+        f"Für die Frage „{question_text}“ erscheint das Ereignis mit {pct:.1f}% {qualifier}. "
+        "Die aktuelle Quellenlage liefert noch keine stark gewichteten strukturierten Claims."
+    )
 
 
 def compute_probability(
@@ -108,11 +193,13 @@ def compute_probability(
     """
     Returns probability in 0..1.
 
-    Adds a first systematic source-research layer:
-    - query expansion
-    - public source retrieval
-    - source classification
-    - source-weighted reasoning
+    Pipeline:
+    1) question-aware prior
+    2) source research
+    3) claim extraction
+    4) claim scoring
+    5) net claim signal -> log-odds update
+    6) manual evidence -> log-odds update
     """
     base_rate_raw = BASE_RATES.get(category, BASE_RATES["default"])
     base_rate_adjusted, question_signals = _infer_question_adjustment(category, question_text)
@@ -124,58 +211,71 @@ def compute_probability(
         "source_counts": {},
         "reasoning": {"pro": [], "contra": [], "uncertainties": []},
     }
+    extracted_claims_bundle: Dict[str, Any] = {
+        "question_text": question_text or "",
+        "claims": [],
+        "claim_counts": {"pro": 0, "contra": 0, "uncertainty": 0, "background": 0},
+    }
+    claim_scoring_bundle: Dict[str, Any] = {
+        "scored_claims": [],
+        "top_pro_claims": [],
+        "top_contra_claims": [],
+        "top_uncertainties": [],
+        "top_background": [],
+        "net_signal": 0.0,
+        "diagnostics": {},
+    }
+    pipeline_errors: List[str] = []
 
     if question_text:
         try:
             research_bundle = research_sources_for_question(question_text)
         except Exception as exc:
-            research_bundle = {
-                "question_text": question_text,
-                "queries": [],
-                "sources": [],
-                "source_counts": {},
-                "reasoning": {
-                    "pro": [],
-                    "contra": [],
-                    "uncertainties": [f"research_error: {str(exc)}"],
-                },
-            }
+            pipeline_errors.append(f"research_error: {str(exc)}")
+
+        try:
+            extracted_claims_bundle = extract_claims_from_sources(
+                question_text=question_text,
+                sources=research_bundle.get("sources", []) or [],
+            )
+        except Exception as exc:
+            pipeline_errors.append(f"claim_extraction_error: {str(exc)}")
+
+        try:
+            claim_scoring_bundle = score_claims(
+                extracted_claims_bundle.get("claims", []) or []
+            )
+        except Exception as exc:
+            pipeline_errors.append(f"claim_scoring_error: {str(exc)}")
 
     lo = _logit(base_rate_adjusted)
 
-    research_delta, research_signals = _research_signal_delta(question_text, research_bundle)
-    lo += research_delta
+    claim_delta, claim_signals = _claims_to_logodds_delta(claim_scoring_bundle)
+    lo += claim_delta
 
-    contributions = []
-    for e in evidence:
-        contribution = float(e.direction) * float(e.weight)
-        contributions.append(
-            {
-                "evidence_id": e.id,
-                "indicator_type": e.indicator_type,
-                "direction": float(e.direction),
-                "weight": float(e.weight),
-                "contribution": contribution,
-            }
-        )
-        lo += contribution
+    manual_delta, contributions = _manual_evidence_to_logodds(evidence)
+    lo += manual_delta
 
     probability = _sigmoid(lo)
 
-    evidence_strength = sum(abs(c["contribution"]) for c in contributions)
     source_count = len(research_bundle.get("sources", []) or [])
+    claim_count = len(claim_scoring_bundle.get("scored_claims", []) or [])
     official_count = int((research_bundle.get("source_counts", {}) or {}).get("official", 0))
     wire_count = int((research_bundle.get("source_counts", {}) or {}).get("wire", 0))
+    evidence_strength = sum(abs(float(c.get("contribution", 0.0))) for c in contributions)
+    uncertainty_drag = float((claim_scoring_bundle.get("diagnostics", {}) or {}).get("uncertainty_drag", 0.0))
 
-    confidence = 25.0
-    confidence += min(25.0, evidence_strength * 18.0)
-    confidence += min(20.0, source_count * 1.2)
-    confidence += min(10.0, official_count * 2.5)
-    confidence += min(8.0, wire_count * 2.0)
-    confidence = min(95.0, confidence)
+    confidence = 20.0
+    confidence += min(20.0, source_count * 1.1)
+    confidence += min(18.0, claim_count * 0.9)
+    confidence += min(10.0, official_count * 2.0)
+    confidence += min(8.0, wire_count * 1.5)
+    confidence += min(18.0, evidence_strength * 14.0)
+    confidence -= min(15.0, uncertainty_drag * 20.0)
+    confidence = min(95.0, max(5.0, confidence))
 
-    reasoning = research_bundle.get("reasoning", {}) or {}
-    summary = build_summary(question_text or "", probability, reasoning)
+    reasoning = _build_reasoning_from_scored_claims(claim_scoring_bundle)
+    summary = _build_summary(question_text or "", probability, claim_scoring_bundle)
 
     explanation = _build_explanation(
         question_text=question_text or "",
@@ -183,26 +283,40 @@ def compute_probability(
         base_rate_adjusted=base_rate_adjusted,
         probability=probability,
         confidence=confidence,
-        contributions=contributions,
         question_signals=question_signals,
-        research_signals=research_signals,
+        claim_signals=claim_signals,
+        contributions=contributions,
         research_bundle=research_bundle,
+        extracted_claims_bundle=extracted_claims_bundle,
+        claim_scoring_bundle=claim_scoring_bundle,
+        reasoning=reasoning,
         summary=summary,
+        pipeline_errors=pipeline_errors,
     )
 
     return {
         "probability": round(probability, 4),  # 0..1
         "confidence": round(confidence, 2),    # 0..100
-        "base_rate": round(base_rate_adjusted, 4),      # 0..1
-        "base_rate_raw": round(base_rate_raw, 4),       # 0..1
+        "base_rate": round(base_rate_adjusted, 4),
+        "base_rate_raw": round(base_rate_raw, 4),
         "summary": summary,
         "question_signals": question_signals,
-        "research_signals": research_signals,
+        "claim_signals": claim_signals,
         "reasoning": reasoning,
         "source_queries": research_bundle.get("queries", []),
         "sources": research_bundle.get("sources", []),
         "source_counts": research_bundle.get("source_counts", {}),
+        "claims": extracted_claims_bundle.get("claims", []),
+        "claim_counts": extracted_claims_bundle.get("claim_counts", {}),
+        "scored_claims": claim_scoring_bundle.get("scored_claims", []),
+        "top_pro_claims": claim_scoring_bundle.get("top_pro_claims", []),
+        "top_contra_claims": claim_scoring_bundle.get("top_contra_claims", []),
+        "top_uncertainties": claim_scoring_bundle.get("top_uncertainties", []),
+        "top_background": claim_scoring_bundle.get("top_background", []),
+        "net_signal": round(float(claim_scoring_bundle.get("net_signal", 0.0)), 4),
+        "diagnostics": claim_scoring_bundle.get("diagnostics", {}),
         "contributions": contributions,
+        "pipeline_errors": pipeline_errors,
         "explanation_md": explanation,
     }
 
@@ -214,11 +328,15 @@ def _build_explanation(
     base_rate_adjusted: float,
     probability: float,
     confidence: float,
-    contributions: List[Dict[str, Any]],
     question_signals: List[str],
-    research_signals: List[str],
+    claim_signals: List[str],
+    contributions: List[Dict[str, Any]],
     research_bundle: Dict[str, Any],
+    extracted_claims_bundle: Dict[str, Any],
+    claim_scoring_bundle: Dict[str, Any],
+    reasoning: Dict[str, List[str]],
     summary: str,
+    pipeline_errors: List[str],
 ) -> str:
     lines: List[str] = []
 
@@ -233,7 +351,7 @@ def _build_explanation(
     lines.append("")
 
     lines.append("### Methodik")
-    lines.append("- Methodik: **bayes_logodds_v1 + source_research_v1**")
+    lines.append("- Methodik: **bayes_logodds_v1 + source_research_v1 + claim_extraction_v1 + claim_scoring_v1**")
     lines.append(f"- Base-Rate (Kategorie, roh): **{base_rate_raw * 100:.1f}%**")
     if abs(base_rate_adjusted - base_rate_raw) > 1e-9:
         lines.append(f"- Base-Rate (nach Frage-Signalen): **{base_rate_adjusted * 100:.1f}%**")
@@ -247,68 +365,118 @@ def _build_explanation(
             lines.append(f"- {signal}")
         lines.append("")
 
-    if research_signals:
-        lines.append("### Research-Signale")
-        for signal in research_signals:
+    if claim_signals:
+        lines.append("### Claim-Signale")
+        for signal in claim_signals:
             lines.append(f"- {signal}")
         lines.append("")
 
-    reasoning = research_bundle.get("reasoning", {}) or {}
-    pro_points = reasoning.get("pro", []) or []
-    contra_points = reasoning.get("contra", []) or []
-    uncertainty_points = reasoning.get("uncertainties", []) or []
+    if pipeline_errors:
+        lines.append("### Pipeline-Hinweise")
+        for err in pipeline_errors:
+            lines.append(f"- {err}")
+        lines.append("")
 
     lines.append("### Gründe, die für das Eintreten sprechen")
-    for point in pro_points[:5]:
+    for point in reasoning.get("pro", [])[:5]:
         lines.append(f"- {point}")
-    if not pro_points:
-        lines.append("- Keine starken Pro-Signale aus der aktuellen Quellenlage extrahiert.")
+    if not reasoning.get("pro"):
+        lines.append("- Keine stark gewichteten Pro-Claims extrahiert.")
     lines.append("")
 
     lines.append("### Gründe, die gegen das Eintreten sprechen")
-    for point in contra_points[:5]:
+    for point in reasoning.get("contra", [])[:5]:
         lines.append(f"- {point}")
-    if not contra_points:
-        lines.append("- Keine starken Contra-Signale aus der aktuellen Quellenlage extrahiert.")
+    if not reasoning.get("contra"):
+        lines.append("- Keine stark gewichteten Contra-Claims extrahiert.")
     lines.append("")
 
     lines.append("### Unsicherheiten")
-    for point in uncertainty_points[:5]:
+    for point in reasoning.get("uncertainties", [])[:5]:
         lines.append(f"- {point}")
-    if not uncertainty_points:
-        lines.append("- Keine spezifischen Unsicherheiten extrahiert; Modellrisiko bleibt bestehen.")
+    if not reasoning.get("uncertainties"):
+        lines.append("- Keine stark gewichteten Unsicherheits-Claims extrahiert.")
     lines.append("")
 
     if contributions:
         lines.append("### Manuelle Evidenz-Updates (additive Log-Odds)")
         for c in contributions:
-            sign = "+" if c["contribution"] >= 0 else ""
+            sign = "+" if float(c.get("contribution", 0.0)) >= 0 else ""
             lines.append(
                 f"- `{c['indicator_type']}` (id={c['evidence_id']}): "
-                f"dir={c['direction']}, weight={c['weight']} → contribution={sign}{c['contribution']:.3f}"
+                f"dir={c['direction']}, weight={c['weight']} → contribution={sign}{float(c['contribution']):.4f}"
             )
         lines.append("")
 
     source_counts = research_bundle.get("source_counts", {}) or {}
-    lines.append("### Quellenbasis")
+    claim_counts = extracted_claims_bundle.get("claim_counts", {}) or {}
+    diagnostics = claim_scoring_bundle.get("diagnostics", {}) or {}
+
+    lines.append("### Strukturierte Pipeline-Statistik")
     lines.append(
-        f"- Quellenanzahl: **{len(research_bundle.get('sources', []) or [])}** "
+        f"- Quellen: **{len(research_bundle.get('sources', []) or [])}** "
         f"(official={source_counts.get('official', 0)}, "
         f"wire={source_counts.get('wire', 0)}, "
         f"research={source_counts.get('research', 0)}, "
         f"major_media={source_counts.get('major_media', 0)}, "
         f"other={source_counts.get('other', 0)})"
     )
+    lines.append(
+        f"- Claims: **{len(extracted_claims_bundle.get('claims', []) or [])}** "
+        f"(pro={claim_counts.get('pro', 0)}, "
+        f"contra={claim_counts.get('contra', 0)}, "
+        f"uncertainty={claim_counts.get('uncertainty', 0)}, "
+        f"background={claim_counts.get('background', 0)})"
+    )
+    lines.append(
+        f"- Scored Claims: **{diagnostics.get('claim_count_scored', 0)}**, "
+        f"net_signal=**{float(claim_scoring_bundle.get('net_signal', 0.0)):+.4f}**"
+    )
+    lines.append("")
 
     queries = research_bundle.get("queries", []) or []
     if queries:
-        lines.append("- Suchanfragen:")
+        lines.append("### Suchanfragen")
         for query in queries[:8]:
-            lines.append(f"  - {query}")
+            lines.append(f"- {query}")
+        lines.append("")
+
+    top_pro_claims = claim_scoring_bundle.get("top_pro_claims", []) or []
+    top_contra_claims = claim_scoring_bundle.get("top_contra_claims", []) or []
+    top_uncertainties = claim_scoring_bundle.get("top_uncertainties", []) or []
+
+    if top_pro_claims:
+        lines.append("### Top Pro Claims")
+        for item in top_pro_claims[:5]:
+            lines.append(
+                f"- {item.get('claim_text', '')} "
+                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
+                f"source={item.get('source_title', 'n/a')}]"
+            )
+        lines.append("")
+
+    if top_contra_claims:
+        lines.append("### Top Contra Claims")
+        for item in top_contra_claims[:5]:
+            lines.append(
+                f"- {item.get('claim_text', '')} "
+                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
+                f"source={item.get('source_title', 'n/a')}]"
+            )
+        lines.append("")
+
+    if top_uncertainties:
+        lines.append("### Top Uncertainty Claims")
+        for item in top_uncertainties[:5]:
+            lines.append(
+                f"- {item.get('claim_text', '')} "
+                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
+                f"source={item.get('source_title', 'n/a')}]"
+            )
+        lines.append("")
 
     sources = research_bundle.get("sources", []) or []
     if sources:
-        lines.append("")
         lines.append("### Verwendete Quellen (Top-Auswahl)")
         for source in sources[:12]:
             title = source.get("title", "untitled")
@@ -326,11 +494,12 @@ def _build_explanation(
             if url:
                 lines.append(f"  - {url}")
     else:
+        lines.append("### Verwendete Quellen")
         lines.append("- Keine Onlinequellen verfügbar oder Recherche fehlgeschlagen.")
 
     lines.append("")
     lines.append("### Hinweis")
-    lines.append("- Diese erste Version nutzt systematische Query-Expansion, öffentliche Suchquellen, Quellendiversität und heuristische Gewichtung.")
-    lines.append("- Als nächste Ausbaustufen sinnvoll: HTML-Volltext-Extraktion, Claim-Extraction, Dedupe über Textähnlichkeit, Kalibrierung mit Brier Score und besseres Time-Decay.")
+    lines.append("- Diese Version nutzt strukturierte Quellenrecherche, Claim-Extraktion, Claim-Scoring und ein konservatives Log-Odds-Update.")
+    lines.append("- Nächste sinnvolle Ausbaustufen: Volltext-Extraktion, sauberere Claim-Normalisierung, Persistenz für Sources/Claims und echte Kalibrierung mit Brier-Score-Daten.")
 
     return "\n".join(lines)
