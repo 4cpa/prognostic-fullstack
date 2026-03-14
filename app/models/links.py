@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from typing import Optional
+
 from sqlmodel import SQLModel, Field
 
 
@@ -19,7 +21,7 @@ class ForecastEvidenceLink(SQLModel, table=True):
 
 
 class ForecastSourceLink(SQLModel, table=True):
-    __tablename__ = "forecast_sources"
+    __tablename__ = "forecast_source_links"
 
     forecast_id: str = Field(foreign_key="forecasts.id", primary_key=True)
     source_id: str = Field(foreign_key="sources.id", primary_key=True)

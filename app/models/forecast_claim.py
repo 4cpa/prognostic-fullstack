@@ -39,6 +39,7 @@ class ForecastClaimBase(SQLModel):
 
 class ForecastClaim(ForecastClaimBase, table=True):
     __tablename__ = "forecast_claims"
+    __table_args__ = {"extend_existing": True}
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
