@@ -1,7 +1,13 @@
 import math
 from typing import List, Dict, Any, Optional, Tuple
 
+from sqlmodel import Session
+
 from app.core.calibration import calibrate_probability
+from app.core.calibration_service import (
+    load_runtime_calibration,
+    select_calibration_table_for_category,
+)
 from app.core.claim_extraction import extract_claims_from_sources
 from app.core.claim_scoring import score_claims
 from app.core.source_research import research_sources_for_question
@@ -176,11 +182,6 @@ def _build_summary(question_text: str, probability: float, claim_scoring: Dict[s
 
 
 def _default_calibration_table() -> Dict[str, Any]:
-    """
-    Conservative no-op default.
-    Until backtest-derived calibration data is wired in, this keeps raw and
-    calibrated probability identical while preserving the output contract.
-    """
     bins = []
     step = 0.1
     lower = 0.0
@@ -208,20 +209,47 @@ def _default_calibration_table() -> Dict[str, Any]:
     }
 
 
-def _load_calibration_table(category: str) -> Dict[str, Any]:
-    """
-    Placeholder hook for future category-specific calibration loading.
-    For now this returns a no-op table so the engine exposes both
-    raw_probability and calibrated_probability without changing behavior.
-    """
-    _ = category
-    return _default_calibration_table()
+def _load_calibration_table(
+    category: str, session: Optional[Session]
+) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
+    signals: List[str] = []
+
+    if session is None:
+        signals.append("calibration_signal: no_session_available -> using neutral calibration")
+        table = _default_calibration_table()
+        runtime = {"global": table, "by_category": {"count_categories": 0, "tables": {}}, "meta": {}}
+        return table, runtime, signals
+
+    try:
+        runtime = load_runtime_calibration(session)
+        table = select_calibration_table_for_category(runtime, category)
+
+        if not table:
+            signals.append("calibration_signal: empty_runtime_table -> using neutral calibration")
+            table = _default_calibration_table()
+
+        meta = runtime.get("meta", {}) or {}
+        signals.append(
+            "calibration_signal: "
+            f"record_count={int(meta.get('record_count', 0) or 0)}, "
+            f"category={category}, "
+            f"table_count={int(table.get('count', 0) or 0)}, "
+            f"avg_abs_gap={float(table.get('avg_abs_gap', 0.0) or 0.0):.4f}"
+        )
+        return table, runtime, signals
+
+    except Exception as exc:
+        signals.append(f"calibration_signal: runtime_load_failed -> {str(exc)}")
+        table = _default_calibration_table()
+        runtime = {"global": table, "by_category": {"count_categories": 0, "tables": {}}, "meta": {}}
+        return table, runtime, signals
 
 
 def compute_probability(
     category: str,
     evidence: List[EvidenceItem],
     question_text: Optional[str] = None,
+    session: Optional[Session] = None,
 ) -> Dict[str, Any]:
     base_rate_raw = BASE_RATES.get(category, BASE_RATES["default"])
     base_rate_adjusted, question_signals = _infer_question_adjustment(category, question_text)
@@ -280,7 +308,7 @@ def compute_probability(
 
     raw_probability = _sigmoid(lo)
 
-    calibration_table = _load_calibration_table(category)
+    calibration_table, runtime_calibration, calibration_signals = _load_calibration_table(category, session)
     calibrated_probability = calibrate_probability(raw_probability, calibration_table)
 
     source_count = len(research_bundle.get("sources", []) or [])
@@ -311,18 +339,20 @@ def compute_probability(
         confidence=confidence,
         question_signals=question_signals,
         claim_signals=claim_signals,
+        calibration_signals=calibration_signals,
         contributions=contributions,
         research_bundle=research_bundle,
         extracted_claims_bundle=extracted_claims_bundle,
         claim_scoring_bundle=claim_scoring_bundle,
         calibration_table=calibration_table,
+        runtime_calibration=runtime_calibration,
         reasoning=reasoning,
         summary=summary,
         pipeline_errors=pipeline_errors,
     )
 
     return {
-        "probability": round(calibrated_probability, 4),  # compatibility alias
+        "probability": round(calibrated_probability, 4),
         "raw_probability": round(raw_probability, 4),
         "calibrated_probability": round(calibrated_probability, 4),
         "confidence": round(confidence, 2),
@@ -331,6 +361,7 @@ def compute_probability(
         "summary": summary,
         "question_signals": question_signals,
         "claim_signals": claim_signals,
+        "calibration_signals": calibration_signals,
         "reasoning": reasoning,
         "source_queries": research_bundle.get("queries", []),
         "sources": research_bundle.get("sources", []),
@@ -349,8 +380,13 @@ def compute_probability(
             "calibrated_probability": round(calibrated_probability, 6),
             "calibration_count": int(calibration_table.get("count", 0) or 0),
             "calibration_avg_abs_gap": float(calibration_table.get("avg_abs_gap", 0.0) or 0.0),
+            "calibration_record_count": int((runtime_calibration.get("meta", {}) or {}).get("record_count", 0) or 0),
+            "overall_brier_score": float((runtime_calibration.get("meta", {}) or {}).get("overall_brier_score", 0.0) or 0.0),
+            "overall_mae": float((runtime_calibration.get("meta", {}) or {}).get("overall_mae", 0.0) or 0.0),
+            "overall_rmse": float((runtime_calibration.get("meta", {}) or {}).get("overall_rmse", 0.0) or 0.0),
         },
         "calibration": calibration_table,
+        "runtime_calibration_meta": runtime_calibration.get("meta", {}) or {},
         "contributions": contributions,
         "pipeline_errors": pipeline_errors,
         "explanation_md": explanation,
@@ -367,11 +403,13 @@ def _build_explanation(
     confidence: float,
     question_signals: List[str],
     claim_signals: List[str],
+    calibration_signals: List[str],
     contributions: List[Dict[str, Any]],
     research_bundle: Dict[str, Any],
     extracted_claims_bundle: Dict[str, Any],
     claim_scoring_bundle: Dict[str, Any],
     calibration_table: Dict[str, Any],
+    runtime_calibration: Dict[str, Any],
     reasoning: Dict[str, List[str]],
     summary: str,
     pipeline_errors: List[str],
@@ -408,6 +446,12 @@ def _build_explanation(
     if claim_signals:
         lines.append("### Claim-Signale")
         for signal in claim_signals:
+            lines.append(f"- {signal}")
+        lines.append("")
+
+    if calibration_signals:
+        lines.append("### Kalibrierungs-Signale")
+        for signal in calibration_signals:
             lines.append(f"- {signal}")
         lines.append("")
 
@@ -465,91 +509,4 @@ def _build_explanation(
         f"- Claims: **{len(extracted_claims_bundle.get('claims', []) or [])}** "
         f"(pro={claim_counts.get('pro', 0)}, "
         f"contra={claim_counts.get('contra', 0)}, "
-        f"uncertainty={claim_counts.get('uncertainty', 0)}, "
-        f"background={claim_counts.get('background', 0)})"
-    )
-    lines.append(
-        f"- Scored Claims: **{diagnostics.get('claim_count_scored', 0)}**, "
-        f"net_signal=**{float(claim_scoring_bundle.get('net_signal', 0.0)):+.4f}**"
-    )
-    lines.append("")
-
-    lines.append("### Kalibrierung")
-    lines.append(
-        f"- Kalibrierungsdatensätze: **{int(calibration_table.get('count', 0) or 0)}**"
-    )
-    lines.append(
-        f"- Durchschnittliche absolute Bucket-Abweichung: **{float(calibration_table.get('avg_abs_gap', 0.0) or 0.0):.4f}**"
-    )
-    lines.append("")
-
-    queries = research_bundle.get("queries", []) or []
-    if queries:
-        lines.append("### Suchanfragen")
-        for query in queries[:8]:
-            lines.append(f"- {query}")
-        lines.append("")
-
-    top_pro_claims = claim_scoring_bundle.get("top_pro_claims", []) or []
-    top_contra_claims = claim_scoring_bundle.get("top_contra_claims", []) or []
-    top_uncertainties = claim_scoring_bundle.get("top_uncertainties", []) or []
-
-    if top_pro_claims:
-        lines.append("### Top Pro Claims")
-        for item in top_pro_claims[:5]:
-            lines.append(
-                f"- {item.get('claim_text', '')} "
-                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
-                f"source={item.get('source_title', 'n/a')}]"
-            )
-        lines.append("")
-
-    if top_contra_claims:
-        lines.append("### Top Contra Claims")
-        for item in top_contra_claims[:5]:
-            lines.append(
-                f"- {item.get('claim_text', '')} "
-                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
-                f"source={item.get('source_title', 'n/a')}]"
-            )
-        lines.append("")
-
-    if top_uncertainties:
-        lines.append("### Top Uncertainty Claims")
-        for item in top_uncertainties[:5]:
-            lines.append(
-                f"- {item.get('claim_text', '')} "
-                f"[w={float(item.get('final_weight', 0.0)):.2f}, "
-                f"source={item.get('source_title', 'n/a')}]"
-            )
-        lines.append("")
-
-    sources = research_bundle.get("sources", []) or []
-    if sources:
-        lines.append("### Verwendete Quellen (Top-Auswahl)")
-        for source in sources[:12]:
-            title = source.get("title", "untitled")
-            publisher = source.get("publisher", source.get("domain", "unknown"))
-            source_type = source.get("source_type", "other")
-            overall_score = float(source.get("overall_score", 0.0))
-            stance = source.get("stance", "neutral")
-            url = source.get("url", "")
-            published_at = source.get("published_at") or "n/a"
-
-            lines.append(
-                f"- **{publisher}** [{source_type}, stance={stance}, score={overall_score:.2f}, published={published_at}]"
-            )
-            lines.append(f"  - {title}")
-            if url:
-                lines.append(f"  - {url}")
-    else:
-        lines.append("### Verwendete Quellen")
-        lines.append("- Keine Onlinequellen verfügbar oder Recherche fehlgeschlagen.")
-
-    lines.append("")
-    lines.append("### Hinweis")
-    lines.append("- Diese Version trennt Rohwahrscheinlichkeit und kalibrierte Wahrscheinlichkeit.")
-    lines.append("- Solange noch keine echten Backtest-Daten angebunden sind, ist die Kalibrierung standardmäßig neutral (no-op).")
-    lines.append("- Nächste sinnvolle Ausbaustufen: Backtest-API, persistente Kalibrierungstabellen und kategorie-/horizontspezifische Kalibrierung.")
-
-    return "\n".join(lines)
+        f"
