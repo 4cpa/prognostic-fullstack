@@ -1,12 +1,12 @@
 export type QuestionCreate = {
   title: string;
   description: string;
-  category?: string; // default: "politics"
+  category?: string;
   region?: string | null;
   country?: string | null;
-  resolve_at: string; // ISO date-time
+  resolve_at: string;
   resolution_criteria: string;
-  resolution_source_policy?: string; // default im Backend
+  resolution_source_policy?: string;
 };
 
 export type QuestionRead = {
@@ -38,10 +38,13 @@ export type ForecastRead = {
 };
 
 function apiBase(): string {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.API_BASE_URL ||
-    "http://backend:8000";
+  const isBrowser = typeof window !== "undefined";
+
+  const base = isBrowser
+    ? process.env.NEXT_PUBLIC_API_BASE_URL || "https://4cpa.org"
+    : process.env.API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      "http://backend:8000";
 
   return base.replace(/\/+$/, "");
 }
