@@ -290,6 +290,7 @@ def create_forecast(
         category=getattr(question, "category", "default"),
         evidence=evidences,
         question_text=question_text,
+        session=session,
     )
 
     forecast = Forecast(
