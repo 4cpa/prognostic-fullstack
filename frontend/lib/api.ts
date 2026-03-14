@@ -37,7 +37,22 @@ export type ForecastRead = {
   created_at?: string;
 };
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+function apiBase(): string {
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    "http://backend:8000";
+
+  return base.replace(/\/+$/, "");
+}
+
+function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${apiBase()}${normalizedPath}`;
+}
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = apiUrl(path);
   const res = await fetch(url, init);
 
   if (!res.ok) {
@@ -49,23 +64,29 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function createQuestion(payload: QuestionCreate): Promise<QuestionRead> {
-  return requestJson<QuestionRead>("/api/questions", {
+  return requestJson<QuestionRead>("/questions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     body: JSON.stringify(payload),
   });
 }
 
 export async function getQuestion(id: string): Promise<QuestionRead> {
-  return requestJson<QuestionRead>(`/api/questions/${encodeURIComponent(id)}`, {
+  return requestJson<QuestionRead>(`/questions/${encodeURIComponent(id)}`, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
 }
 
-export async function createForecast(questionId: string, methodVersion = "v0.1.0"): Promise<ForecastRead> {
+export async function createForecast(
+  questionId: string,
+  methodVersion = "v0.1.0"
+): Promise<ForecastRead> {
   return requestJson<ForecastRead>(
-    `/api/questions/${encodeURIComponent(questionId)}/forecast?method_version=${encodeURIComponent(methodVersion)}`,
+    `/questions/${encodeURIComponent(questionId)}/forecast?method_version=${encodeURIComponent(methodVersion)}`,
     {
       method: "POST",
       headers: { Accept: "application/json" },
@@ -74,8 +95,11 @@ export async function createForecast(questionId: string, methodVersion = "v0.1.0
 }
 
 export async function getForecasts(questionId: string): Promise<ForecastRead[]> {
-  return requestJson<ForecastRead[]>(`/api/questions/${encodeURIComponent(questionId)}/forecasts`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-  });
+  return requestJson<ForecastRead[]>(
+    `/questions/${encodeURIComponent(questionId)}/forecasts`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    }
+  );
 }
