@@ -63,6 +63,29 @@ def _build_inputs_hash(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _fallback_explanation(question_text: str, result: Dict[str, Any]) -> str:
+    raw_probability = float(result.get("raw_probability", result.get("probability", 0.0)) or 0.0)
+    calibrated_probability = float(result.get("calibrated_probability", result.get("probability", 0.0)) or 0.0)
+    confidence = float(result.get("confidence", 0.0) or 0.0)
+    summary = _safe_text(result.get("summary", ""))
+
+    lines = [
+        "### Prognose",
+        f"- Frage: **{question_text or 'n/a'}**",
+        f"- Rohwahrscheinlichkeit: **{raw_probability * 100:.2f}%**",
+        f"- Kalibrierte Eintrittswahrscheinlichkeit: **{calibrated_probability * 100:.2f}%**",
+        f"- Confidence: **{confidence:.2f}%**",
+        "",
+        "### Kurzbegründung",
+        summary or "Keine strukturierte Erklärung verfügbar. Fallback-Erklärung aus API-Route verwendet.",
+        "",
+        "### Hinweis",
+        "- explanation_md war in der Engine leer oder nicht gesetzt.",
+        "- Dieser Forecast wurde mit einer defensiven Fallback-Erklärung gespeichert.",
+    ]
+    return "\n".join(lines)
+
+
 def _persist_sources(session: Session, forecast_id: str, sources: List[dict]) -> None:
     for source in sources:
         record = ForecastSource(
@@ -293,13 +316,17 @@ def create_forecast(
         session=session,
     )
 
+    explanation_md = _safe_text(result.get("explanation_md", ""))
+    if not explanation_md:
+        explanation_md = _fallback_explanation(question_text, result)
+
     forecast = Forecast(
         question_id=question_id,
         probability=float(result["probability"]),
         confidence=float(result["confidence"]),
         method="bayes_logodds_v1",
         method_version=method_version,
-        explanation_md=result["explanation_md"],
+        explanation_md=explanation_md,
         inputs_hash=_build_inputs_hash(
             question=question,
             evidences=evidences,
