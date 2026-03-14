@@ -17,8 +17,8 @@ type ForecastRead = {
   id: string;
   question_id: string;
   created_at: string;
-  probability: number; // 0..1
-  confidence?: number | null; // 0..100
+  probability: number;
+  confidence?: number | null;
   method: string;
   method_version: string;
   explanation_md: string;
@@ -81,6 +81,15 @@ type ForecastClaim = {
   created_at?: string | null;
 };
 
+type RuntimeCalibrationMeta = {
+  record_count?: number;
+  num_bins?: number;
+  min_bin_count?: number;
+  overall_brier_score?: number;
+  overall_mae?: number;
+  overall_rmse?: number;
+};
+
 type ForecastDiagnostics = {
   source_count: number;
   claim_count: number;
@@ -91,11 +100,20 @@ type ForecastDiagnostics = {
   uncertainty_weight_sum: number;
   background_weight_sum: number;
   net_signal: number;
+  raw_probability?: number;
+  calibrated_probability?: number;
+  runtime_calibration_meta?: RuntimeCalibrationMeta;
 };
 
 type FullForecastResponse = {
   question: ForecastQuestion;
-  forecast: ForecastRead;
+  forecast: ForecastRead & {
+    raw_probability?: number;
+    calibrated_probability?: number;
+    calibration_signals?: string[];
+    runtime_calibration_meta?: RuntimeCalibrationMeta;
+    calibration?: Record<string, unknown>;
+  };
   summary: string;
   sources: ForecastSource[];
   claims: ForecastClaim[];
@@ -121,20 +139,21 @@ function humanizeSlug(slug: string): string {
   }
 }
 
-function toPercent(probability: number): string {
-  const normalized =
-    probability > 1
-      ? Math.min(Math.max(probability / 100, 0), 1)
-      : Math.min(Math.max(probability, 0), 1);
+function toPercentFromNormalized(probability?: number | null): string {
+  if (probability == null || Number.isNaN(probability)) return "n/a";
+  const normalized = Math.min(Math.max(probability, 0), 1);
+  return `${(normalized * 100).toFixed(1)}%`;
+}
 
+function toPercentAuto(probability?: number | null): string {
+  if (probability == null || Number.isNaN(probability)) return "n/a";
+  const normalized =
+    probability > 1 ? Math.min(Math.max(probability / 100, 0), 1) : Math.min(Math.max(probability, 0), 1);
   return `${(normalized * 100).toFixed(1)}%`;
 }
 
 function formatConfidence(confidence?: number | null): string | null {
-  if (confidence == null || Number.isNaN(confidence)) {
-    return null;
-  }
-
+  if (confidence == null || Number.isNaN(confidence)) return null;
   const normalized = Math.min(Math.max(confidence, 0), 100);
   return `${normalized.toFixed(1)}%`;
 }
@@ -143,9 +162,7 @@ function formatDate(value?: string | null): string {
   if (!value) return "n/a";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
 
   return date.toLocaleString("de-DE", {
     year: "numeric",
@@ -156,7 +173,7 @@ function formatDate(value?: string | null): string {
 
 function scoreLabel(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return "n/a";
-  return value.toFixed(2);
+  return value.toFixed(4);
 }
 
 async function createQuestionFromSlug(slug: string): Promise<{ id: string }> {
@@ -237,6 +254,24 @@ function Section({
   );
 }
 
+function MetricCard({
+  label,
+  value,
+  subtext,
+}: {
+  label: string;
+  value: string;
+  subtext?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 p-4">
+      <p className="mb-1 text-sm text-gray-500">{label}</p>
+      <p className="text-2xl font-semibold">{value}</p>
+      {subtext ? <p className="mt-1 text-xs text-gray-500">{subtext}</p> : null}
+    </div>
+  );
+}
+
 function ClaimList({
   claims,
   emptyText,
@@ -283,6 +318,9 @@ export default async function ForecastPage({
 
   const forecast = full.forecast;
   const question = full.question;
+  const rawProbability = forecast.raw_probability;
+  const calibratedProbability = forecast.calibrated_probability;
+  const calibrationMeta = forecast.runtime_calibration_meta || full.diagnostics.runtime_calibration_meta || {};
 
   return (
     <div className="min-h-screen bg-gray-50 p-10">
@@ -296,31 +334,59 @@ export default async function ForecastPage({
       </p>
 
       <Section title="Ergebnis">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="mb-1 text-sm text-gray-500">Eintrittswahrscheinlichkeit</p>
-            <p className="text-2xl font-semibold">{toPercent(forecast.probability)}</p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="Eintrittswahrscheinlichkeit"
+            value={toPercentAuto(forecast.probability)}
+            subtext="Persistierter Forecast-Wert"
+          />
+          <MetricCard
+            label="Rohwahrscheinlichkeit"
+            value={toPercentFromNormalized(rawProbability)}
+            subtext="Vor Kalibrierung"
+          />
+          <MetricCard
+            label="Kalibrierte Wahrscheinlichkeit"
+            value={toPercentFromNormalized(calibratedProbability)}
+            subtext="Nach Backtesting/Kalibrierung"
+          />
+          <MetricCard
+            label="Confidence"
+            value={formatConfidence(forecast.confidence) ?? "n/a"}
+            subtext="Heuristische Modell-Sicherheit"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+            <p className="mb-2 font-medium">Forecast-Metadaten</p>
+            <p>Methode: {forecast.method}</p>
+            <p>Version: {forecast.method_version}</p>
+            <p>Auflösung: {formatDate(question.resolve_at)}</p>
+            <p>Kategorie: {question.category || "n/a"}</p>
           </div>
 
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="mb-1 text-sm text-gray-500">Confidence</p>
-            <p className="text-2xl font-semibold">
-              {formatConfidence(forecast.confidence) ?? "n/a"}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="mb-1 text-sm text-gray-500">Methodik</p>
-            <p className="text-base font-medium">
-              {forecast.method} ({forecast.method_version})
-            </p>
+          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+            <p className="mb-2 font-medium">Kalibrierungs-Meta</p>
+            <p>Backtest-Records: {calibrationMeta.record_count ?? 0}</p>
+            <p>Buckets: {calibrationMeta.num_bins ?? "n/a"}</p>
+            <p>Min Bin Count: {calibrationMeta.min_bin_count ?? "n/a"}</p>
+            <p>Brier Score: {scoreLabel(calibrationMeta.overall_brier_score)}</p>
+            <p>MAE: {scoreLabel(calibrationMeta.overall_mae)}</p>
+            <p>RMSE: {scoreLabel(calibrationMeta.overall_rmse)}</p>
           </div>
         </div>
 
-        <div className="mt-4 text-sm text-gray-600">
-          <p>Auflösung: {formatDate(question.resolve_at)}</p>
-          <p>Kategorie: {question.category || "n/a"}</p>
-        </div>
+        {forecast.calibration_signals?.length ? (
+          <div className="mt-4 rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+            <p className="mb-2 font-medium">Kalibrierungs-Signale</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {forecast.calibration_signals.map((signal, index) => (
+                <li key={`${signal}-${index}`}>{signal}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Section>
 
       <Section title="Kurzbegründung">
@@ -351,7 +417,7 @@ export default async function ForecastPage({
       </Section>
 
       <Section title="Diagnostik">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
             <p className="mb-2 font-medium">Quellen</p>
             <p>Gesamt: {full.diagnostics.source_count}</p>
@@ -370,6 +436,14 @@ export default async function ForecastPage({
             <p>Uncertainty: {full.claim_counts.uncertainty ?? 0}</p>
             <p>Background: {full.claim_counts.background ?? 0}</p>
             <p>Net Signal: {scoreLabel(full.diagnostics.net_signal)}</p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+            <p className="mb-2 font-medium">Probability / Calibration</p>
+            <p>Persistiert: {toPercentAuto(forecast.probability)}</p>
+            <p>Roh: {toPercentFromNormalized(full.diagnostics.raw_probability)}</p>
+            <p>Kalibriert: {toPercentFromNormalized(full.diagnostics.calibrated_probability)}</p>
+            <p>Brier Score: {scoreLabel(calibrationMeta.overall_brier_score)}</p>
           </div>
         </div>
       </Section>
