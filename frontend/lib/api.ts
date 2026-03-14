@@ -41,10 +41,8 @@ function apiBase(): string {
   const isBrowser = typeof window !== "undefined";
 
   const base = isBrowser
-    ? process.env.NEXT_PUBLIC_API_BASE_URL || "https://4cpa.org"
-    : process.env.API_BASE_URL ||
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
-      "http://backend:8000";
+    ? process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
+    : process.env.API_BASE_URL || "http://backend:8000";
 
   return base.replace(/\/+$/, "");
 }
