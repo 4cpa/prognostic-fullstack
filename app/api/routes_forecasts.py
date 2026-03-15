@@ -7,17 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.core.forecast_engine import generate_forecast
-
-try:
-    from app.db import get_session  # preferred
-except Exception:  # pragma: no cover
-    from app.database import get_session  # fallback
-
-try:
-    from app.models import Forecast, Question
-except Exception:  # pragma: no cover
-    from app.models.forecast import Forecast  # type: ignore
-    from app.models.question import Question  # type: ignore
+from app.core.db import get_session
+from app.models import Forecast, Question
 
 
 router = APIRouter(prefix="/questions", tags=["forecasts"])
@@ -43,17 +34,6 @@ def _safe_get(obj: Any, *names: str, default: Any = None) -> Any:
     return default
 
 
-def _question_text(question: Any) -> str:
-    return (
-        _safe_get(question, "title", "question", "text", "prompt", default=None)
-        or "Untitled question"
-    )
-
-
-def _question_slug(question: Any) -> Optional[str]:
-    return _safe_get(question, "slug", default=None)
-
-
 def _to_float(value: Any) -> Optional[float]:
     try:
         if value is None:
@@ -68,7 +48,22 @@ def _to_list(value: Any) -> list[Any]:
         return []
     if isinstance(value, list):
         return value
-    return list(value) if isinstance(value, tuple) else [value]
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+def _question_to_dict(question: Any) -> dict[str, Any]:
+    return {
+        "id": _safe_get(question, "id"),
+        "slug": _safe_get(question, "slug"),
+        "title": _safe_get(question, "title"),
+        "question": _safe_get(question, "question", "text"),
+        "created_at": _safe_get(question, "created_at"),
+        "resolved_at": _safe_get(question, "resolved_at"),
+        "is_resolved": _safe_get(question, "is_resolved"),
+        "outcome": _safe_get(question, "outcome"),
+    }
 
 
 def _forecast_model_to_summary_dict(forecast: Any) -> dict[str, Any]:
@@ -87,19 +82,6 @@ def _forecast_model_to_summary_dict(forecast: Any) -> dict[str, Any]:
         "answer_rationale_short": _safe_get(forecast, "answer_rationale_short"),
         "created_at": _safe_get(forecast, "created_at"),
         "updated_at": _safe_get(forecast, "updated_at"),
-    }
-
-
-def _question_to_dict(question: Any) -> dict[str, Any]:
-    return {
-        "id": _safe_get(question, "id"),
-        "slug": _safe_get(question, "slug"),
-        "title": _safe_get(question, "title"),
-        "question": _safe_get(question, "question", "text"),
-        "created_at": _safe_get(question, "created_at"),
-        "resolved_at": _safe_get(question, "resolved_at"),
-        "is_resolved": _safe_get(question, "is_resolved"),
-        "outcome": _safe_get(question, "outcome"),
     }
 
 
@@ -149,14 +131,14 @@ def _copy_engine_fields_onto_model(model: Any, payload: dict[str, Any]) -> None:
             setattr(model, field_name, payload[field_name])
 
 
-def _get_question_or_404(session: Session, question_id: int) -> Any:
+def _get_question_or_404(session: Session, question_id: int) -> Question:
     question = session.get(Question, question_id)
     if question is None:
         raise HTTPException(status_code=404, detail="Question not found")
     return question
 
 
-def _get_latest_forecast(session: Session, question_id: int) -> Any | None:
+def _get_latest_forecast(session: Session, question_id: int) -> Forecast | None:
     statement = (
         select(Forecast)
         .where(Forecast.question_id == question_id)
@@ -261,6 +243,7 @@ def recompute_latest_forecast(
         forecast = Forecast(
             question_id=question_id,
             created_at=_utcnow(),
+            updated_at=_utcnow(),
         )
         session.add(forecast)
 
