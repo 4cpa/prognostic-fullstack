@@ -1,256 +1,258 @@
-"use client";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import React, { useMemo, useState } from "react";
-import {
-  createForecast,
-  createQuestion,
-  getForecasts,
-  type ForecastRead,
-  type QuestionCreate,
-  type QuestionRead,
-} from "../lib/api";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function isoFromDateOnly(dateStr: string): string {
-  // dateStr: YYYY-MM-DD
-  // Wir setzen 12:00 UTC, damit es keine TZ-Überraschungen gibt.
-  return new Date(`${dateStr}T12:00:00.000Z`).toISOString();
+type QuestionCreateResponse = {
+  id: string;
+  slug?: string | null;
+  title?: string | null;
+  description?: string | null;
+  resolve_at?: string | null;
+  resolution_criteria?: string | null;
+};
+
+type ForecastCreateResponse = {
+  question?: {
+    id?: string | null;
+    slug?: string | null;
+    title?: string | null;
+    question?: string | null;
+  } | null;
+  forecast?: {
+    id?: string | null;
+    question_id?: string | null;
+    probability?: number | null;
+    raw_probability?: number | null;
+    calibrated_probability?: number | null;
+    confidence?: number | null;
+    summary?: string | null;
+    explanation_md?: string | null;
+    explanationMd?: string | null;
+    direct_answer?: string | null;
+    answer_label?: string | null;
+    answer_confidence_band?: string | null;
+    answer_rationale_short?: string | null;
+    created_at?: string | null;
+  } | null;
+};
+
+type CreateState = {
+  error?: string;
+};
+
+function getApiBaseUrl(): string {
+  return (
+    process.env.INTERNAL_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_INTERNAL_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    "http://backend:8000"
+  ).replace(/\/+$/, "");
 }
 
-function defaultResolveDatePlusDays(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD
-}
-
-function toPercent(p: number): string {
-  if (!Number.isFinite(p)) return "–";
-  const pct = Math.round(p * 1000) / 10; // 1 Nachkommastelle
-  return `${pct.toFixed(1)}%`;
-}
-
-function stripMarkdown(md: string): string {
-  // simpel & robust genug: entfernt die häufigsten Markdown-Syntaxteile
-  return md
-    .replace(/```[\s\S]*?```/g, "") // code blocks
-    .replace(/`([^`]+)`/g, "$1") // inline code
-    .replace(/!\[.*?\]\(.*?\)/g, "") // images
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
-    .replace(/[#>*_~\-]{1,}/g, " ") // markdown chars
-    .replace(/\s+/g, " ")
+function stripMarkdown(input: string): string {
+  return input
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
-function germanForecastText(opts: {
-  qTitle: string;
-  qDescription: string;
-  resolveAtIso: string;
-  resolutionCriteria: string;
-  sourcePolicy: string;
-  probability: number;
-  explanationMd: string;
-}): string {
-  const resolveAt = new Date(opts.resolveAtIso);
-  const resolveAtDe = Number.isNaN(resolveAt.getTime())
-    ? opts.resolveAtIso
-    : resolveAt.toLocaleDateString("de-CH", {
-        year: "numeric",
-        month: "long",
-        day: "2-digit",
-      });
+async function createQuestionAndForecast(
+  _prevState: CreateState | undefined,
+  formData: FormData,
+): Promise<CreateState> {
+  "use server";
 
-  const explanation = stripMarkdown(opts.explanationMd);
-  const pct = toPercent(opts.probability);
+  const title = String(formData.get("title") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const resolveAt = String(formData.get("resolve_at") || "").trim();
+  const resolutionCriteria = String(formData.get("resolution_criteria") || "").trim();
 
-  return [
-    `Prognose: Für die Frage „${opts.qTitle}“ liegt die geschätzte Eintrittswahrscheinlichkeit bei ${pct}.`,
-    `Kontext: ${opts.qDescription}`,
-    `Auflösung: Die Frage wird voraussichtlich am ${resolveAtDe} entschieden.`,
-    `Kriterien: ${opts.resolutionCriteria}`,
-    `Quellenregel: ${opts.sourcePolicy}`,
-    explanation ? `Begründung: ${explanation}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-export default function Page() {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [resolutionCriteria, setResolutionCriteria] = useState(
-    "Resolve based on the stated question outcome. Use official sources and at least one major wire service if applicable."
-  );
-  const [resolveDate, setResolveDate] = useState(defaultResolveDatePlusDays(180)); // default: +180 Tage
-  const [category, setCategory] = useState("politics");
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [createdQuestion, setCreatedQuestion] = useState<QuestionRead | null>(null);
-  const [createdForecast, setCreatedForecast] = useState<ForecastRead | null>(null);
-  const [forecasts, setForecasts] = useState<ForecastRead[] | null>(null);
-
-  const canSubmit = useMemo(() => {
-    return (
-      !loading &&
-      title.trim().length > 0 &&
-      description.trim().length > 0 &&
-      resolutionCriteria.trim().length > 0 &&
-      resolveDate.trim().length === 10
-    );
-  }, [loading, title, description, resolutionCriteria, resolveDate]);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); // iPhone/Safari: verhindert Reload auf "/"
-    if (!canSubmit) return;
-
-    setError(null);
-    setCreatedQuestion(null);
-    setCreatedForecast(null);
-    setForecasts(null);
-
-    setLoading(true);
-    try {
-      const payload: QuestionCreate = {
-        title: title.trim(),
-        description: description.trim(),
-        category: category.trim() || "politics",
-        resolve_at: isoFromDateOnly(resolveDate),
-        resolution_criteria: resolutionCriteria.trim(),
-      };
-
-      // 1) Question erstellen
-      const q = await createQuestion(payload);
-      setCreatedQuestion(q);
-
-      // 2) Forecast erstellen
-      const f = await createForecast(q.id, "v0.1.0");
-      setCreatedForecast(f);
-
-      // 3) Forecasts laden (Liste)
-      const list = await getForecasts(q.id);
-      setForecasts(list);
-    } catch (err: any) {
-      setError(err?.message ?? "Unbekannter Fehler");
-    } finally {
-      setLoading(false);
-    }
+  if (!title || !description || !resolveAt || !resolutionCriteria) {
+    return { error: "Bitte alle Felder ausfüllen." };
   }
 
-  const germanText =
-    createdQuestion && createdForecast
-      ? germanForecastText({
-          qTitle: createdQuestion.title,
-          qDescription: createdQuestion.description,
-          resolveAtIso: createdQuestion.resolve_at,
-          resolutionCriteria: createdQuestion.resolution_criteria,
-          sourcePolicy: createdQuestion.resolution_source_policy,
-          probability: createdForecast.probability,
-          explanationMd: createdForecast.explanation_md,
-        })
-      : null;
+  const baseUrl = getApiBaseUrl();
 
+  let createdQuestion: QuestionCreateResponse;
+  try {
+    const questionRes = await fetch(`${baseUrl}/questions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify({
+        title,
+        description,
+        resolve_at: resolveAt,
+        resolution_criteria: resolutionCriteria,
+      }),
+    });
+
+    if (!questionRes.ok) {
+      const text = await questionRes.text();
+      return { error: `POST /questions failed: ${questionRes.status} ${text}` };
+    }
+
+    createdQuestion = (await questionRes.json()) as QuestionCreateResponse;
+  } catch (error) {
+    return { error: `POST /questions failed: ${String(error)}` };
+  }
+
+  const questionId = createdQuestion?.id;
+  if (!questionId) {
+    return { error: "Question created, aber keine ID in der Antwort gefunden." };
+  }
+
+  let createdForecast: ForecastCreateResponse["forecast"] | null | undefined;
+  let createdForecastQuestion: ForecastCreateResponse["question"] | null | undefined;
+
+  try {
+    const forecastRes = await fetch(
+      `${baseUrl}/questions/${questionId}/forecast?method_version=v0.1.0`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!forecastRes.ok) {
+      const text = await forecastRes.text();
+      return {
+        error: `POST /api/questions/${questionId}/forecast?method_version=v0.1.0 failed: ${forecastRes.status} ${text}`,
+      };
+    }
+
+    const forecastJson = (await forecastRes.json()) as ForecastCreateResponse;
+    createdForecast = forecastJson?.forecast ?? null;
+    createdForecastQuestion = forecastJson?.question ?? null;
+  } catch (error) {
+    return { error: `POST /forecast failed: ${String(error)}` };
+  }
+
+  const explanation =
+    createdForecast?.explanation_md ??
+    createdForecast?.explanationMd ??
+    createdForecast?.summary ??
+    "";
+
+  const summaryText = stripMarkdown(explanation);
+
+  const targetSlug =
+    createdForecastQuestion?.slug ||
+    createdQuestion.slug ||
+    createdForecastQuestion?.id ||
+    createdQuestion.id;
+
+  if (targetSlug) {
+    redirect(`/forecast/${targetSlug}`);
+  }
+
+  return {
+    error:
+      summaryText ||
+      "Frage und Forecast wurden erzeugt, aber es konnte kein Ziel-Link bestimmt werden.",
+  };
+}
+
+export default function HomePage() {
   return (
-    <main style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700 }}>4CPA Prognose</h1>
-
-      <form onSubmit={onSubmit} style={{ marginTop: 16, display: "grid", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 14, opacity: 0.85 }}>Titel</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="z.B. Wird die EU bis Ende 2026 zerbrechen?"
-            style={{ padding: 12, fontSize: 16, border: "1px solid #ddd", borderRadius: 8 }}
-            autoComplete="off"
-            enterKeyHint="go"
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 14, opacity: 0.85 }}>Beschreibung</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Kontext / genauer Wortlaut / Bedingungen…"
-            rows={4}
-            style={{ padding: 12, fontSize: 16, border: "1px solid #ddd", borderRadius: 8 }}
-          />
-        </label>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 14, opacity: 0.85 }}>Resolve Date</span>
-            <input
-              type="date"
-              value={resolveDate}
-              onChange={(e) => setResolveDate(e.target.value)}
-              style={{ padding: 12, fontSize: 16, border: "1px solid #ddd", borderRadius: 8 }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 14, opacity: 0.85 }}>Kategorie</span>
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="politics"
-              style={{ padding: 12, fontSize: 16, border: "1px solid #ddd", borderRadius: 8 }}
-              autoComplete="off"
-            />
-          </label>
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <Link href="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+            4cpa Prognostic
+          </Link>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+            Neue Prognosefrage anlegen
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Frage erfassen, dann direkt einen Forecast erzeugen und zur Detailseite springen.
+          </p>
         </div>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 14, opacity: 0.85 }}>Resolution Criteria</span>
-          <textarea
-            value={resolutionCriteria}
-            onChange={(e) => setResolutionCriteria(e.target.value)}
-            rows={3}
-            style={{ padding: 12, fontSize: 16, border: "1px solid #ddd", borderRadius: 8 }}
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          style={{
-            padding: 12,
-            fontSize: 16,
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            cursor: canSubmit ? "pointer" : "not-allowed",
-          }}
+        <form
+          action={createQuestionAndForecast}
+          className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          {loading ? "Berechne…" : "Prognose anzeigen"}
-        </button>
-
-        {error && (
-          <p style={{ margin: 0, color: "crimson" }}>
-            Fehler: {error}
-          </p>
-        )}
-      </form>
-
-      {germanText && (
-        <section style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 600 }}>Antwort</h2>
-          <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 8, lineHeight: 1.6 }}>
-            {germanText}
+          <div>
+            <label htmlFor="title" className="mb-2 block text-sm font-medium text-slate-900">
+              Titel
+            </label>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              required
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500"
+              placeholder="Wird X bis Ende 2026 eintreten?"
+            />
           </div>
-        </section>
-      )}
 
-      {/* optional: Debug-Info behalten */}
-      {forecasts && forecasts.length > 0 && (
-        <section style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 14, opacity: 0.8 }}>
-            Forecasts vorhanden: {forecasts.length}
+          <div>
+            <label htmlFor="description" className="mb-2 block text-sm font-medium text-slate-900">
+              Beschreibung
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              required
+              rows={4}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500"
+              placeholder="Kurze Beschreibung der Frage und des Kontexts."
+            />
           </div>
-        </section>
-      )}
+
+          <div>
+            <label htmlFor="resolve_at" className="mb-2 block text-sm font-medium text-slate-900">
+              Resolve At
+            </label>
+            <input
+              id="resolve_at"
+              name="resolve_at"
+              type="datetime-local"
+              required
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none ring-0 focus:border-slate-500"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="resolution_criteria"
+              className="mb-2 block text-sm font-medium text-slate-900"
+            >
+              Resolution Criteria
+            </label>
+            <textarea
+              id="resolution_criteria"
+              name="resolution_criteria"
+              required
+              rows={4}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500"
+              placeholder="Wann gilt die Frage als Ja oder Nein?"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Frage anlegen und Forecast erzeugen
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
