@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type PageProps = {
+  searchParams?: Promise<{ error?: string }> | { error?: string };
+};
+
 type QuestionCreateResponse = {
   id: string;
   slug?: string | null;
@@ -38,10 +42,6 @@ type ForecastCreateResponse = {
   } | null;
 };
 
-type CreateState = {
-  error?: string;
-};
-
 function getApiBaseUrl(): string {
   return (
     process.env.INTERNAL_API_BASE_URL ||
@@ -64,10 +64,11 @@ function stripMarkdown(input: string): string {
     .trim();
 }
 
-async function createQuestionAndForecast(
-  _prevState: CreateState | undefined,
-  formData: FormData,
-): Promise<CreateState> {
+function toErrorUrl(message: string): string {
+  return `/?error=${encodeURIComponent(message)}`;
+}
+
+async function createQuestionAndForecast(formData: FormData): Promise<void> {
   "use server";
 
   const title = String(formData.get("title") || "").trim();
@@ -76,7 +77,7 @@ async function createQuestionAndForecast(
   const resolutionCriteria = String(formData.get("resolution_criteria") || "").trim();
 
   if (!title || !description || !resolveAt || !resolutionCriteria) {
-    return { error: "Bitte alle Felder ausfüllen." };
+    redirect(toErrorUrl("Bitte alle Felder ausfüllen."));
   }
 
   const baseUrl = getApiBaseUrl();
@@ -100,17 +101,17 @@ async function createQuestionAndForecast(
 
     if (!questionRes.ok) {
       const text = await questionRes.text();
-      return { error: `POST /questions failed: ${questionRes.status} ${text}` };
+      redirect(toErrorUrl(`POST /questions failed: ${questionRes.status} ${text}`));
     }
 
     createdQuestion = (await questionRes.json()) as QuestionCreateResponse;
   } catch (error) {
-    return { error: `POST /questions failed: ${String(error)}` };
+    redirect(toErrorUrl(`POST /questions failed: ${String(error)}`));
   }
 
   const questionId = createdQuestion?.id;
   if (!questionId) {
-    return { error: "Question created, aber keine ID in der Antwort gefunden." };
+    redirect(toErrorUrl("Question created, aber keine ID in der Antwort gefunden."));
   }
 
   let createdForecast: ForecastCreateResponse["forecast"] | null | undefined;
@@ -130,16 +131,18 @@ async function createQuestionAndForecast(
 
     if (!forecastRes.ok) {
       const text = await forecastRes.text();
-      return {
-        error: `POST /api/questions/${questionId}/forecast?method_version=v0.1.0 failed: ${forecastRes.status} ${text}`,
-      };
+      redirect(
+        toErrorUrl(
+          `POST /api/questions/${questionId}/forecast?method_version=v0.1.0 failed: ${forecastRes.status} ${text}`,
+        ),
+      );
     }
 
     const forecastJson = (await forecastRes.json()) as ForecastCreateResponse;
     createdForecast = forecastJson?.forecast ?? null;
     createdForecastQuestion = forecastJson?.question ?? null;
   } catch (error) {
-    return { error: `POST /forecast failed: ${String(error)}` };
+    redirect(toErrorUrl(`POST /forecast failed: ${String(error)}`));
   }
 
   const explanation =
@@ -160,14 +163,20 @@ async function createQuestionAndForecast(
     redirect(`/forecast/${targetSlug}`);
   }
 
-  return {
-    error:
+  redirect(
+    toErrorUrl(
       summaryText ||
-      "Frage und Forecast wurden erzeugt, aber es konnte kein Ziel-Link bestimmt werden.",
-  };
+        "Frage und Forecast wurden erzeugt, aber es konnte kein Ziel-Link bestimmt werden.",
+    ),
+  );
 }
 
-export default function HomePage() {
+export default async function HomePage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await Promise.resolve(searchParams);
+  const error = resolvedSearchParams?.error
+    ? decodeURIComponent(String(resolvedSearchParams.error))
+    : null;
+
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
@@ -182,6 +191,12 @@ export default function HomePage() {
             Frage erfassen, dann direkt einen Forecast erzeugen und zur Detailseite springen.
           </p>
         </div>
+
+        {error ? (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </div>
+        ) : null}
 
         <form
           action={createQuestionAndForecast}
