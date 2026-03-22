@@ -40,7 +40,8 @@ def _split_sentences(text: str) -> List[str]:
 def _combine_source_text(source: Dict[str, Any]) -> str:
     title = _normalize_text(source.get("title", ""))
     summary = _normalize_text(source.get("summary", ""))
-    return _normalize_text(f"{title}. {summary}")
+    excerpt = _normalize_text(source.get("excerpt", ""))
+    return _normalize_text(f"{title}. {summary}. {excerpt}")
 
 
 def _question_tokens(question_text: str) -> List[str]:
@@ -61,6 +62,10 @@ def _keyword_overlap(question_text: str, text: str) -> float:
     return _clamp(overlap / denom, 0.0, 1.0)
 
 
+def _contains_any(text: str, terms: List[str]) -> int:
+    return sum(1 for term in terms if term in text)
+
+
 def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -> str:
     text = _lower(sentence)
     q = _lower(question_text)
@@ -70,40 +75,53 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
         "war", "escalation", "mobilization", "offensive", "crisis", "sanctions shock",
         "default", "recession", "bank run", "conflict", "attack", "invasion",
         "zerbrechen", "zerfall", "krieg", "eskalation", "krise", "angriff", "invasion",
+        "weltkrieg", "world war", "militärschlag", "military strike", "retaliation",
+        "vergeltung", "regional war", "regionalkrieg",
     ]
     contra_terms = [
         "stability", "stable", "continuity", "agreement", "unity", "cooperation",
         "ceasefire", "de-escalation", "institutional continuity", "support package",
         "reaffirmed commitment", "resilience", "integration",
         "stabilität", "einigung", "zusammenhalt", "waffenstillstand", "deeskalation",
-        "kontinuität", "unterstützung", "integration",
+        "kontinuität", "unterstützung", "integration", "diplomatic solution",
+        "diplomatische lösung", "negotiation", "verhandlung", "containment",
+        "eingedämmt", "calm", "beruhigung",
     ]
     uncertainty_terms = [
         "may", "might", "could", "risk", "warning", "concern", "uncertain",
-        "volatility", "tension", "scenario", "possible", "unlikely", "likely",
+        "volatility", "tension", "scenario", "possible",
         "könnte", "risiko", "warnung", "sorge", "unsicher", "spannung", "szenario",
-        "möglich", "wahrscheinlich", "unwahrscheinlich",
+        "möglich",
     ]
 
-    pro_hits = sum(1 for term in pro_terms if term in text)
-    contra_hits = sum(1 for term in contra_terms if term in text)
-    uncertainty_hits = sum(1 for term in uncertainty_terms if term in text)
+    pro_hits = _contains_any(text, pro_terms)
+    contra_hits = _contains_any(text, contra_terms)
+    uncertainty_hits = _contains_any(text, uncertainty_terms)
 
-    if ("weltkrieg" in q or "world war" in q) and ("ceasefire" in text or "de-escalation" in text):
-        contra_hits += 1
-    if ("eu" in q or "european union" in q) and ("unity" in text or "integration" in text):
-        contra_hits += 1
-    if ("eu" in q or "european union" in q) and ("withdrawal" in text or "exit" in text or "fracture" in text):
-        pro_hits += 1
+    if ("weltkrieg" in q or "world war" in q) and (
+        "ceasefire" in text or "de-escalation" in text or "waffenstillstand" in text or "deeskalation" in text
+    ):
+        contra_hits += 2
 
-    if pro_hits > contra_hits and pro_hits >= 1:
+    if ("weltkrieg" in q or "world war" in q) and (
+        "attack" in text or "retaliation" in text or "mobilization" in text or "offensive" in text
+    ):
+        pro_hits += 2
+
+    if pro_hits >= contra_hits + 1 and pro_hits >= 1:
         return "pro"
-    if contra_hits > pro_hits and contra_hits >= 1:
+
+    if contra_hits >= pro_hits + 1 and contra_hits >= 1:
         return "contra"
+
+    if fallback_stance == "pro":
+        return "pro"
+    if fallback_stance == "contra":
+        return "contra"
+
     if uncertainty_hits >= 1:
         return "uncertainty"
-    if fallback_stance in CLAIM_TYPES:
-        return fallback_stance
+
     return "background"
 
 
@@ -128,13 +146,14 @@ def _claim_confidence(
         "research": 0.05,
         "major_media": 0.03,
         "other": 0.0,
+        "fallback": -0.08,
     }.get(source_type, 0.0)
 
     claim_type_bonus = {
-        "pro": 0.04,
-        "contra": 0.04,
+        "pro": 0.05,
+        "contra": 0.05,
         "uncertainty": 0.02,
-        "background": 0.0,
+        "background": -0.03,
     }.get(claim_type, 0.0)
 
     score = (
@@ -213,6 +232,10 @@ def extract_claims_from_source(
             continue
 
         claim_type = _infer_claim_type(question_text, sentence, fallback_stance)
+
+        if claim_type == "background":
+            continue
+
         claim_confidence = _claim_confidence(
             question_text=question_text,
             sentence=sentence,
@@ -258,23 +281,27 @@ def extract_claims_from_sources(
             all_claims.append(ExtractedClaim(**item))
 
     deduped = _dedupe_claims(all_claims)
-    deduped = sorted(
-        deduped,
-        key=lambda c: (c.claim_confidence * 0.75 + c.time_relevance * 0.25),
-        reverse=True,
-    )[:max_total_claims]
-
-    counts = {
-        "pro": 0,
-        "contra": 0,
-        "uncertainty": 0,
-        "background": 0,
-    }
-    for claim in deduped:
-        counts[claim.claim_type] = counts.get(claim.claim_type, 0) + 1
+    deduped = deduped[:max_total_claims]
 
     return {
-        "question_text": question_text,
         "claims": [asdict(c) for c in deduped],
-        "claim_counts": counts,
+        "count": len(deduped),
     }
+
+
+def extract_claims(
+    question_text: str,
+    sources: Optional[List[Dict[str, Any]]] = None,
+    session: Any = None,
+    *,
+    max_claims_per_source: int = 3,
+    max_total_claims: int = 30,
+) -> List[Dict[str, Any]]:
+    del session
+    payload = extract_claims_from_sources(
+        question_text,
+        sources or [],
+        max_claims_per_source=max_claims_per_source,
+        max_total_claims=max_total_claims,
+    )
+    return payload["claims"]
