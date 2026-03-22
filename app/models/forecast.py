@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
@@ -29,15 +29,15 @@ class ForecastRead(SQLModel):
     answer_confidence_band: Optional[str] = None
     answer_rationale_short: Optional[str] = None
 
-    runtime_calibration_meta: Optional[dict[str, Any]] = None
-    calibration_signals: Optional[dict[str, Any]] = None
-    diagnostics: Optional[dict[str, Any]] = None
+    runtime_calibration_meta: Optional[Dict[str, Any]] = None
+    calibration_signals: Optional[Dict[str, Any]] = None
+    diagnostics: Optional[Dict[str, Any]] = None
 
-    sources: Optional[list[dict[str, Any]]] = None
-    claims: Optional[list[dict[str, Any]]] = None
-    top_pro_claims: Optional[list[dict[str, Any]]] = None
-    top_contra_claims: Optional[list[dict[str, Any]]] = None
-    top_uncertainties: Optional[list[dict[str, Any]]] = None
+    sources: Optional[List[Dict[str, Any]]] = None
+    claims: Optional[List[Dict[str, Any]]] = None
+    top_pro_claims: Optional[List[Dict[str, Any]]] = None
+    top_contra_claims: Optional[List[Dict[str, Any]]] = None
+    top_uncertainties: Optional[List[Dict[str, Any]]] = None
 
     updated_at: Optional[datetime] = None
 
@@ -51,7 +51,6 @@ class Forecast(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default=None)
 
-    # Engine arbeitet aktuell in 0..1.
     probability: float = Field(ge=0, le=1)
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
 
@@ -70,36 +69,36 @@ class Forecast(SQLModel, table=True):
     answer_confidence_band: Optional[str] = Field(default=None)
     answer_rationale_short: Optional[str] = Field(default=None)
 
-    runtime_calibration_meta: Optional[dict[str, Any]] = Field(
+    runtime_calibration_meta: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    calibration_signals: Optional[dict[str, Any]] = Field(
+    calibration_signals: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    diagnostics: Optional[dict[str, Any]] = Field(
+    diagnostics: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
 
-    sources: Optional[list[dict[str, Any]]] = Field(
+    sources: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    claims: Optional[list[dict[str, Any]]] = Field(
+    claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    top_pro_claims: Optional[list[dict[str, Any]]] = Field(
+    top_pro_claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    top_contra_claims: Optional[list[dict[str, Any]]] = Field(
+    top_contra_claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
-    top_uncertainties: Optional[list[dict[str, Any]]] = Field(
+    top_uncertainties: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         sa_column=Column(JSONB, nullable=True),
     )
