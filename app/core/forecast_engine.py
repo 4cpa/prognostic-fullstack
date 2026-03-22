@@ -7,9 +7,6 @@ import math
 import re
 
 
-# Optional project imports.
-# The file is written so that it still behaves defensively if one of these modules
-# is temporarily missing or has a different interface in the current repo state.
 try:
     from app.core.source_research import research_sources as _research_sources  # type: ignore
 except Exception:  # pragma: no cover
@@ -73,7 +70,6 @@ def _normalize_probability_value(probability: Optional[float]) -> Optional[float
     if value < 0:
         value = 0.0
 
-    # Defensive support for older 0..100 flows.
     if value > 1.0:
         value = value / 100.0
 
@@ -85,7 +81,6 @@ def _normalize_score(value: Any, default: float = 0.0) -> float:
     if parsed is None:
         return default
 
-    # Defensive support for score values that may still appear in 0..100 form.
     if parsed > 1.0:
         parsed = parsed / 100.0
 
@@ -97,6 +92,46 @@ def _clean_text(text: Any, fallback: str = "") -> str:
         return fallback
     cleaned = " ".join(str(text).strip().split())
     return cleaned or fallback
+
+
+def _ensure_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+def _unwrap_sources_payload(result: Any) -> list[Any]:
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return result
+    if isinstance(result, tuple):
+        return list(result)
+    if isinstance(result, dict):
+        for key in ("sources", "items", "results", "data"):
+            value = result.get(key)
+            if isinstance(value, list):
+                return value
+    return []
+
+
+def _unwrap_claims_payload(result: Any) -> list[Any]:
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return result
+    if isinstance(result, tuple):
+        return list(result)
+    if isinstance(result, dict):
+        for key in ("claims", "items", "results", "data"):
+            value = result.get(key)
+            if isinstance(value, list):
+                return value
+    return []
 
 
 def _question_text(question: Any) -> str:
@@ -112,6 +147,16 @@ def _question_text(question: Any) -> str:
             return _clean_text(value, "this question")
 
     return "this question"
+
+
+def _question_description(question: Any) -> str:
+    if question is None:
+        return ""
+    for attr in ("description", "details", "context"):
+        value = getattr(question, attr, None)
+        if value:
+            return _clean_text(value)
+    return ""
 
 
 def _question_category(question: Any) -> Optional[str]:
@@ -136,8 +181,13 @@ def _source_to_dict(source: Any) -> dict[str, Any]:
             "excerpt": getattr(source, "excerpt", None),
             "summary": getattr(source, "summary", None),
             "relevance_score": getattr(source, "relevance_score", None),
+            "credibility_score": getattr(source, "credibility_score", None),
+            "freshness_score": getattr(source, "freshness_score", None),
+            "overall_score": getattr(source, "overall_score", None),
             "weight": getattr(source, "weight", None),
             "source_type": getattr(source, "source_type", None),
+            "stance": getattr(source, "stance", None),
+            "signal_strength": getattr(source, "signal_strength", None),
         }
 
     item["title"] = _clean_text(item.get("title"))
@@ -147,22 +197,65 @@ def _source_to_dict(source: Any) -> dict[str, Any]:
     item["excerpt"] = _clean_text(item.get("excerpt"))
     item["summary"] = _clean_text(item.get("summary"))
     item["relevance_score"] = _normalize_score(item.get("relevance_score"), 0.0)
-    item["weight"] = _normalize_score(item.get("weight"), item["relevance_score"])
-    if "source_type" in item:
-        item["source_type"] = _clean_text(item.get("source_type"))
+    item["credibility_score"] = _normalize_score(item.get("credibility_score"), 0.6)
+    item["freshness_score"] = _normalize_score(item.get("freshness_score"), 0.45)
+    item["overall_score"] = _normalize_score(
+        item.get("overall_score"),
+        (item["relevance_score"] + item["credibility_score"] + item["freshness_score"]) / 3.0,
+    )
+    item["weight"] = _normalize_score(item.get("weight"), item["overall_score"])
+    item["source_type"] = _clean_text(item.get("source_type"))
+    item["stance"] = _clean_text(item.get("stance"))
+    item["signal_strength"] = _normalize_score(item.get("signal_strength"), item["overall_score"])
     return item
 
 
 def _claim_direction_from_text(value: Any) -> str:
     text = _clean_text(value).lower()
-    if text in {"pro", "support", "supports", "positive", "yes", "for"}:
+
+    if text in {"pro", "support", "supports", "positive", "yes", "for", "bullish"}:
         return "pro"
-    if text in {"contra", "against", "negative", "no", "con"}:
+
+    if text in {"contra", "against", "negative", "no", "con", "bearish"}:
         return "contra"
+
+    if text in {
+        "uncertain",
+        "uncertainty",
+        "background",
+        "neutral",
+        "mixed",
+        "unknown",
+        "open",
+    }:
+        return "uncertain"
+
     return "uncertain"
 
 
-def _claim_to_dict(claim: Any) -> dict[str, Any]:
+def _fallback_claim_text_from_item(item: dict[str, Any], question_text: str) -> str:
+    candidates = [
+        item.get("claim_text"),
+        item.get("text"),
+        item.get("summary"),
+        item.get("excerpt"),
+        item.get("source_title"),
+        item.get("title"),
+        item.get("explanation"),
+    ]
+
+    for candidate in candidates:
+        text = _clean_text(candidate)
+        if text and text.lower() != "unnamed claim":
+            return text
+
+    return (
+        f"Die verfügbare Evidenz zur Frage „{question_text}“ ist derzeit zu schwach oder zu uneinheitlich "
+        "für eine klare Aussage."
+    )
+
+
+def _claim_to_dict(claim: Any, question_text: str = "this question") -> dict[str, Any]:
     if isinstance(claim, dict):
         item = dict(claim)
     else:
@@ -183,9 +276,13 @@ def _claim_to_dict(claim: Any) -> dict[str, Any]:
             "direction": getattr(claim, "direction", None) or getattr(claim, "stance", None),
             "signed_weight": getattr(claim, "signed_weight", None),
             "explanation": getattr(claim, "explanation", None),
+            "summary": getattr(claim, "summary", None),
+            "excerpt": getattr(claim, "excerpt", None),
+            "title": getattr(claim, "title", None),
         }
 
-    item["claim_text"] = _clean_text(item.get("claim_text"), "Unnamed claim")
+    fallback_claim_text = _fallback_claim_text_from_item(item, question_text)
+    item["claim_text"] = _clean_text(item.get("claim_text"), fallback_claim_text)
     item["claim_type"] = _clean_text(item.get("claim_type"))
     item["source_url"] = item.get("source_url")
     item["source_title"] = _clean_text(item.get("source_title"))
@@ -206,7 +303,9 @@ def _claim_to_dict(claim: Any) -> dict[str, Any]:
         )
         / 5.0,
     )
-    item["direction"] = _claim_direction_from_text(item.get("direction"))
+
+    raw_direction = item.get("direction") or item.get("claim_type")
+    item["direction"] = _claim_direction_from_text(raw_direction)
     item["explanation"] = _clean_text(item.get("explanation"))
 
     signed_weight = _safe_float(item.get("signed_weight"))
@@ -222,33 +321,51 @@ def _claim_to_dict(claim: Any) -> dict[str, Any]:
     return item
 
 
-def _fallback_research_sources(question_text: str, max_sources: int) -> list[dict[str, Any]]:
+def _fallback_research_sources(
+    question_text: str,
+    question_description: str,
+    max_sources: int,
+) -> list[dict[str, Any]]:
+    context_text = question_description or question_text
     return [
         {
             "title": f"Question context: {question_text[:120]}",
             "url": None,
             "domain": "internal",
             "published_at": None,
-            "excerpt": question_text,
-            "summary": "Fallback source created from the question text because no research backend was available.",
-            "relevance_score": 0.50,
-            "weight": 0.50,
+            "excerpt": context_text,
+            "summary": "Fallback source created from the stored question context because no research backend was available.",
+            "relevance_score": 0.55,
+            "credibility_score": 0.35,
+            "freshness_score": 0.50,
+            "overall_score": 0.47,
+            "weight": 0.47,
             "source_type": "fallback",
+            "stance": "uncertainty",
+            "signal_strength": 0.45,
         }
     ][:max_sources]
 
 
-def _fallback_extract_claims(question_text: str, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _fallback_extract_claims(
+    question_text: str,
+    sources: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    source = sources[0] if sources else {}
+
     return [
         {
-            "claim_text": f"The available information around '{question_text}' is limited, so the forecast remains close to the base rate.",
+            "claim_text": (
+                f"Zur Frage „{question_text}“ liegt aktuell keine belastbare externe Evidenzpipeline vor. "
+                "Die Prognose bleibt deshalb nahe an der Basisrate."
+            ),
             "claim_type": "uncertainty",
-            "source_url": sources[0].get("url") if sources else None,
-            "source_title": sources[0].get("title") if sources else "Fallback source",
-            "source_type": sources[0].get("source_type") if sources else "fallback",
+            "source_url": source.get("url"),
+            "source_title": source.get("title") or "Fallback source",
+            "source_type": source.get("source_type") or "fallback",
             "claim_confidence": 0.45,
             "time_relevance": 0.50,
-            "source_quality_weight": 0.50,
+            "source_quality_weight": 0.40,
             "relevance_weight": 0.50,
             "freshness_weight": 0.50,
             "final_weight": 0.45,
@@ -259,9 +376,14 @@ def _fallback_extract_claims(question_text: str, sources: list[dict[str, Any]]) 
     ]
 
 
-def _call_research_sources(question_text: str, session: Any, config: EngineConfig) -> list[dict[str, Any]]:
+def _call_research_sources(
+    question_text: str,
+    question_description: str,
+    session: Any,
+    config: EngineConfig,
+) -> list[dict[str, Any]]:
     if _research_sources is None:
-        return _fallback_research_sources(question_text, config.max_sources)
+        return _fallback_research_sources(question_text, question_description, config.max_sources)
 
     try:
         result = _research_sources(question_text, session=session, max_sources=config.max_sources)
@@ -270,14 +392,17 @@ def _call_research_sources(question_text: str, session: Any, config: EngineConfi
             result = _research_sources(question_text, session=session)
         except TypeError:
             result = _research_sources(question_text)
+        except Exception:
+            return _fallback_research_sources(question_text, question_description, config.max_sources)
     except Exception:
-        return _fallback_research_sources(question_text, config.max_sources)
+        return _fallback_research_sources(question_text, question_description, config.max_sources)
 
-    if not result:
-        return _fallback_research_sources(question_text, config.max_sources)
+    unpacked = _unwrap_sources_payload(result)
+    if not unpacked:
+        return _fallback_research_sources(question_text, question_description, config.max_sources)
 
-    normalized = [_source_to_dict(item) for item in list(result)[: config.max_sources]]
-    return normalized or _fallback_research_sources(question_text, config.max_sources)
+    normalized = [_source_to_dict(item) for item in unpacked[: config.max_sources]]
+    return normalized or _fallback_research_sources(question_text, question_description, config.max_sources)
 
 
 def _call_extract_claims(question_text: str, sources: list[dict[str, Any]], session: Any) -> list[dict[str, Any]]:
@@ -294,18 +419,21 @@ def _call_extract_claims(question_text: str, sources: list[dict[str, Any]], sess
                 result = _extract_claims(question_text, sources)
             except Exception:
                 return _fallback_extract_claims(question_text, sources)
+        except Exception:
+            return _fallback_extract_claims(question_text, sources)
     except Exception:
         return _fallback_extract_claims(question_text, sources)
 
-    if not result:
+    unpacked = _unwrap_claims_payload(result)
+    if not unpacked:
         return _fallback_extract_claims(question_text, sources)
 
-    return [_claim_to_dict(item) for item in result]
+    return [_claim_to_dict(item, question_text=question_text) for item in unpacked]
 
 
 def _call_score_claims(claims: list[dict[str, Any]], question_text: str, session: Any) -> list[dict[str, Any]]:
     if _score_claims is None:
-        return [_claim_to_dict(item) for item in claims]
+        return [_claim_to_dict(item, question_text=question_text) for item in claims]
 
     try:
         result = _score_claims(question_text, claims=claims, session=session)
@@ -316,14 +444,17 @@ def _call_score_claims(claims: list[dict[str, Any]], question_text: str, session
             try:
                 result = _score_claims(claims)
             except Exception:
-                return [_claim_to_dict(item) for item in claims]
+                return [_claim_to_dict(item, question_text=question_text) for item in claims]
+        except Exception:
+            return [_claim_to_dict(item, question_text=question_text) for item in claims]
     except Exception:
-        return [_claim_to_dict(item) for item in claims]
+        return [_claim_to_dict(item, question_text=question_text) for item in claims]
 
-    if not result:
-        return [_claim_to_dict(item) for item in claims]
+    unpacked = _unwrap_claims_payload(result)
+    if not unpacked:
+        return [_claim_to_dict(item, question_text=question_text) for item in claims]
 
-    return [_claim_to_dict(item) for item in result]
+    return [_claim_to_dict(item, question_text=question_text) for item in unpacked]
 
 
 def _sigmoid(value: float) -> float:
@@ -366,8 +497,8 @@ def _compute_probability_from_claims(
             uncertain_weight_sum += final_weight
 
     net_signal = pro_weight_sum - contra_weight_sum
-
     evidence_strength = net_signal / max(1.0, len(claims) * 0.60)
+
     prior_logit = math.log(max(1e-6, prior) / max(1e-6, 1.0 - prior))
     combined_logit = prior_logit + evidence_strength
     probability = _clamp(_sigmoid(combined_logit), 0.0, 1.0)
@@ -776,14 +907,20 @@ class ForecastEngine:
         category: Optional[str] = None,
     ) -> dict[str, Any]:
         question_text = _question_text(question)
+        question_description = _question_description(question)
         category = category or _question_category(question)
 
-        sources = _call_research_sources(question_text, session=session, config=self.config)
+        sources = _call_research_sources(
+            question_text=question_text,
+            question_description=question_description,
+            session=session,
+            config=self.config,
+        )
         sources = sources[: self.config.max_sources]
 
         extracted_claims = _call_extract_claims(question_text, sources=sources, session=session)
         scored_claims = _call_score_claims(extracted_claims, question_text=question_text, session=session)
-        claims = [_claim_to_dict(item) for item in scored_claims][: self.config.max_claims]
+        claims = [_claim_to_dict(item, question_text=question_text) for item in scored_claims][: self.config.max_claims]
 
         raw_probability, probability_diagnostics = _compute_probability_from_claims(
             claims,
@@ -823,10 +960,9 @@ class ForecastEngine:
             runtime_calibration_meta=runtime_calibration_meta,
         )
 
-        effective_probability = calibrated_probability
         direct_answer_payload = build_direct_answer(
             question_text=question_text,
-            probability=effective_probability,
+            probability=calibrated_probability,
         )
 
         diagnostics: dict[str, Any] = {
@@ -878,10 +1014,6 @@ def compute_probability(
     category: Optional[str] = None,
     config: Optional[EngineConfig] = None,
 ) -> dict[str, Any]:
-    """
-    Backward-compatible convenience entry point.
-    Keeps the older function name alive while returning the richer engine payload.
-    """
     return generate_forecast(
         question=question,
         session=session,
