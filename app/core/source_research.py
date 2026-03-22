@@ -41,7 +41,7 @@ WIRE_DOMAINS = {
     "reuters.com",
     "apnews.com",
     "afp.com",
-    "news.yahoo.com",  # oft Reuters/AP-Republishes
+    "news.yahoo.com",
 }
 
 RESEARCH_DOMAINS = {
@@ -82,15 +82,15 @@ class SourceCandidate:
     title: str
     domain: str
     publisher: str
-    source_type: str  # official | wire | research | major_media | other
+    source_type: str
     published_at: Optional[str]
     query: str
-    retrieval_method: str  # gdelt | google_news_rss | official_catalog
+    retrieval_method: str
     relevance_score: float
     credibility_score: float
     freshness_score: float
     overall_score: float
-    stance: str  # pro | contra | neutral | uncertainty
+    stance: str
     signal_strength: float
     summary: str
 
@@ -194,7 +194,6 @@ def _freshness_score(published_at: Optional[str]) -> float:
         return 0.45
 
     delta_days = max(((_utcnow() - dt.astimezone(timezone.utc)).total_seconds() / 86400.0), 0.0)
-    # langsamer Abfall; neue Quellen werden bevorzugt
     return max(0.20, math.exp(-delta_days / 180.0))
 
 
@@ -208,7 +207,7 @@ def _keyword_overlap_score(question_text: str, title: str, summary: str) -> floa
     if not q_tokens:
         return 0.3
 
-    s_tokens = set(_tokenize(f"{title} {summary}"))
+    s_tokens = set(_tokenize("%s %s" % (title, summary)))
     if not s_tokens:
         return 0.2
 
@@ -218,7 +217,7 @@ def _keyword_overlap_score(question_text: str, title: str, summary: str) -> floa
 
 
 def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, float]:
-    text = _normalize_text(f"{title} {summary}")
+    text = _normalize_text("%s %s" % (title, summary))
     q = _normalize_text(question_text)
 
     pro_terms = [
@@ -227,12 +226,25 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "disintegration",
         "war",
         "conflict escalation",
+        "escalation",
         "exit",
         "withdrawal",
         "crisis",
         "fracture",
         "mobilization",
         "sanctions shock",
+        "attack",
+        "offensive",
+        "retaliation",
+        "world war",
+        "regional war",
+        "zerfall",
+        "krieg",
+        "eskalation",
+        "angriff",
+        "vergeltung",
+        "weltkrieg",
+        "regionalkrieg",
     ]
     contra_terms = [
         "stability",
@@ -245,6 +257,17 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "integration",
         "support package",
         "reaffirmed commitment",
+        "negotiation",
+        "diplomatic solution",
+        "containment",
+        "stabilität",
+        "zusammenhalt",
+        "einigung",
+        "waffenstillstand",
+        "deeskalation",
+        "verhandlung",
+        "diplomatische lösung",
+        "eingedämmt",
     ]
     uncertainty_terms = [
         "uncertain",
@@ -256,23 +279,36 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "scenario",
         "could",
         "may",
+        "possible",
+        "risiko",
+        "warnung",
+        "sorge",
+        "unsicher",
+        "spannung",
+        "szenario",
+        "möglich",
     ]
 
     pro_hits = sum(1 for t in pro_terms if t in text)
     contra_hits = sum(1 for t in contra_terms if t in text)
     uncertainty_hits = sum(1 for t in uncertainty_terms if t in text)
 
-    # kleine thematische Spezialfälle
-    if ("weltkrieg" in q or "world war" in q) and ("ceasefire" in text or "de-escalation" in text):
-        contra_hits += 1
-    if ("eu" in q or "european union" in q) and ("unity" in text or "agreement" in text):
+    if ("weltkrieg" in q or "world war" in q) and (
+        "ceasefire" in text or "de-escalation" in text or "waffenstillstand" in text or "deeskalation" in text
+    ):
+        contra_hits += 2
+    if ("weltkrieg" in q or "world war" in q) and (
+        "attack" in text or "retaliation" in text or "mobilization" in text or "offensive" in text
+    ):
+        pro_hits += 2
+    if ("eu" in q or "european union" in q) and ("unity" in text or "agreement" in text or "integration" in text):
         contra_hits += 1
     if ("eu" in q or "european union" in q) and ("exit" in text or "withdrawal" in text or "fracture" in text):
         pro_hits += 1
 
-    if pro_hits > contra_hits and pro_hits >= 1:
+    if pro_hits >= contra_hits + 1 and pro_hits >= 1:
         return "pro", min(1.0, 0.25 + pro_hits * 0.15)
-    if contra_hits > pro_hits and contra_hits >= 1:
+    if contra_hits >= pro_hits + 1 and contra_hits >= 1:
         return "contra", min(1.0, 0.25 + contra_hits * 0.15)
     if uncertainty_hits >= 1:
         return "uncertainty", min(1.0, 0.20 + uncertainty_hits * 0.10)
@@ -334,15 +370,15 @@ def _dedupe_sources(sources: List[SourceCandidate]) -> List[SourceCandidate]:
     seen = set()
     deduped: List[SourceCandidate] = []
 
-    for s in sorted(sources, key=lambda x: x.overall_score, reverse=True):
+    for source in sorted(sources, key=lambda x: x.overall_score, reverse=True):
         key = (
-            s.url.split("?")[0].rstrip("/").lower(),
-            re.sub(r"[^a-z0-9]+", " ", s.title.lower()).strip(),
+            source.url.split("?")[0].rstrip("/").lower(),
+            re.sub(r"[^a-z0-9]+", " ", source.title.lower()).strip(),
         )
         if key in seen:
             continue
         seen.add(key)
-        deduped.append(s)
+        deduped.append(source)
 
     return deduped
 
@@ -351,7 +387,7 @@ def _fetch_gdelt_sources(query: str, question_text: str, max_records: int = 8) -
     encoded = urllib.parse.quote(query)
     url = (
         "https://api.gdeltproject.org/api/v2/doc/doc?"
-        f"query={encoded}&mode=ArtList&format=json&maxrecords={max_records}&sort=HybridRel"
+        "query=%s&mode=ArtList&format=json&maxrecords=%s&sort=HybridRel" % (encoded, max_records)
     )
 
     try:
@@ -366,8 +402,8 @@ def _fetch_gdelt_sources(query: str, question_text: str, max_records: int = 8) -
         article_url = article.get("url") or ""
         title = article.get("title") or article_url
         publisher = article.get("domain") or _extract_domain(article_url)
-        published_at = article.get("seendate") or article.get("socialimage") or None
-        summary = article.get("sourcecountry") or article.get("domain") or ""
+        published_at = article.get("seendate") or None
+        summary = article.get("socialtitle") or article.get("sourcecountry") or article.get("domain") or ""
 
         if not article_url:
             continue
@@ -390,7 +426,7 @@ def _fetch_gdelt_sources(query: str, question_text: str, max_records: int = 8) -
 
 def _fetch_google_news_rss(query: str, question_text: str, max_records: int = 8) -> List[SourceCandidate]:
     encoded = urllib.parse.quote(query)
-    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    url = "https://news.google.com/rss/search?q=%s&hl=en-US&gl=US&ceid=US:en" % encoded
 
     try:
         root = _safe_xml_get(url)
@@ -483,13 +519,15 @@ def build_query_variants(question_text: str, max_queries: int = 8) -> List[str]:
             ]
         )
 
-    if "weltkrieg" in q_lower or "world war" in q_lower:
+    if "weltkrieg" in q_lower or "world war" in q_lower or "krieg" in q_lower or "war" in q_lower:
         queries.extend(
             [
                 "world war risk 2026 official Reuters AP AFP",
                 "global conflict escalation 2026 Reuters AP AFP",
                 "NATO UN global war warning Reuters",
                 "major power conflict risk official statements Reuters",
+                "Iran Israel escalation Reuters AP AFP official",
+                "ceasefire de-escalation Reuters official statements",
             ]
         )
 
@@ -501,13 +539,12 @@ def build_query_variants(question_text: str, max_queries: int = 8) -> List[str]:
             ]
         )
 
-    # generische query-expansion
     queries.extend(
         [
-            f"{q} official statements",
-            f"{q} Reuters",
-            f"{q} AP AFP",
-            f"{q} think tank analysis",
+            "%s official statements" % q,
+            "%s Reuters" % q,
+            "%s AP AFP" % q,
+            "%s think tank analysis" % q,
         ]
     )
 
@@ -534,8 +571,20 @@ def _source_type_counts(sources: List[SourceCandidate]) -> Dict[str, int]:
         "major_media": 0,
         "other": 0,
     }
-    for s in sources:
-        counts[s.source_type] = counts.get(s.source_type, 0) + 1
+    for source in sources:
+        counts[source.source_type] = counts.get(source.source_type, 0) + 1
+    return counts
+
+
+def _stance_counts(sources: List[SourceCandidate]) -> Dict[str, int]:
+    counts = {
+        "pro": 0,
+        "contra": 0,
+        "uncertainty": 0,
+        "neutral": 0,
+    }
+    for source in sources:
+        counts[source.stance] = counts.get(source.stance, 0) + 1
     return counts
 
 
@@ -547,12 +596,11 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int) -
         "major_media": [],
         "other": [],
     }
-    for s in sorted(sources, key=lambda x: x.overall_score, reverse=True):
-        by_type.setdefault(s.source_type, []).append(s)
+    for source in sorted(sources, key=lambda x: x.overall_score, reverse=True):
+        by_type.setdefault(source.source_type, []).append(source)
 
     selected: List[SourceCandidate] = []
 
-    # Mindestmix
     quotas = [
         ("official", 3),
         ("wire", 2),
@@ -566,18 +614,26 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int) -
                 break
             selected.append(item)
 
-    # Rest nach Score auffüllen
-    selected_urls = {s.url for s in selected}
+    selected_urls = set(s.url for s in selected)
     remainder = [
-        s
-        for s in sorted(sources, key=lambda x: x.overall_score, reverse=True)
-        if s.url not in selected_urls
+        source
+        for source in sorted(sources, key=lambda x: x.overall_score, reverse=True)
+        if source.url not in selected_urls
     ]
 
     for item in remainder:
         if len(selected) >= max_sources:
             break
         selected.append(item)
+
+    pro_or_contra = [s for s in selected if s.stance in {"pro", "contra"}]
+    if not pro_or_contra:
+        directional_candidates = [
+            s for s in sorted(sources, key=lambda x: (x.signal_strength, x.overall_score), reverse=True)
+            if s.stance in {"pro", "contra"} and s.url not in set(item.url for item in selected)
+        ]
+        if directional_candidates:
+            selected = selected[:-1] + [directional_candidates[0]]
 
     return selected[:max_sources]
 
@@ -587,13 +643,13 @@ def build_reasoning_from_sources(question_text: str, sources: List[SourceCandida
     contra_points: List[str] = []
     uncertainty_points: List[str] = []
 
-    for s in sorted(sources, key=lambda x: x.overall_score, reverse=True):
-        bullet = f"{s.publisher}: {s.title}"
-        if s.stance == "pro" and bullet not in pro_points:
+    for source in sorted(sources, key=lambda x: x.overall_score, reverse=True):
+        bullet = "%s: %s" % (source.publisher, source.title)
+        if source.stance == "pro" and bullet not in pro_points:
             pro_points.append(bullet)
-        elif s.stance == "contra" and bullet not in contra_points:
+        elif source.stance == "contra" and bullet not in contra_points:
             contra_points.append(bullet)
-        elif s.stance in {"uncertainty", "neutral"} and bullet not in uncertainty_points:
+        elif source.stance in {"uncertainty", "neutral"} and bullet not in uncertainty_points:
             uncertainty_points.append(bullet)
 
     if not contra_points:
@@ -619,44 +675,97 @@ def build_summary(question_text: str, probability: float, reasoning: Dict[str, L
     elif pct < 40:
         qualifier = "derzeit möglich, aber unter 50%"
     elif pct < 60:
-        qualifier = "derzeit ungefähr ausgeglichen"
+        qualifier = "derzeit offen und nahe an 50/50"
     elif pct < 75:
         qualifier = "derzeit eher wahrscheinlich"
     else:
-        qualifier = "derzeit klar wahrscheinlich"
+        qualifier = "derzeit klar erhöht"
 
-    first_contra = reasoning.get("contra", ["Die höher gewichtete Quellenlage spricht eher gegen das Eintreten."])[0]
-    return (
-        f"Für die Frage „{question_text}“ erscheint das Ereignis mit {pct:.1f}% {qualifier}. "
-        f"Zentral für diese Einschätzung ist: {first_contra}"
-    )
+    parts = [
+        "Für die Frage „%s“ ist das Ereignis %s (%.1f%%)." % (question_text, qualifier, pct),
+    ]
+
+    if reasoning.get("pro"):
+        parts.append("Pro: %s" % reasoning["pro"][0])
+    if reasoning.get("contra"):
+        parts.append("Contra: %s" % reasoning["contra"][0])
+    if reasoning.get("uncertainties"):
+        parts.append("Unsicherheit: %s" % reasoning["uncertainties"][0])
+
+    return " ".join(parts)
 
 
-def research_sources_for_question(
+def _probability_from_sources(sources: List[SourceCandidate]) -> float:
+    if not sources:
+        return 0.50
+
+    prior = 0.50
+    pro_signal = 0.0
+    contra_signal = 0.0
+    uncertain_signal = 0.0
+
+    for source in sources:
+        weighted_signal = source.signal_strength * source.overall_score
+        if source.stance == "pro":
+            pro_signal += weighted_signal
+        elif source.stance == "contra":
+            contra_signal += weighted_signal
+        else:
+            uncertain_signal += weighted_signal
+
+    net_signal = pro_signal - contra_signal
+    dampener = 1.0 + uncertain_signal * 0.6
+    adjusted_signal = net_signal / dampener
+
+    logit = math.log(max(1e-6, prior) / max(1e-6, 1.0 - prior))
+    probability = 1.0 / (1.0 + math.exp(-(logit + adjusted_signal)))
+    return max(0.02, min(0.98, round(probability, 4)))
+
+
+def research_sources(
     question_text: str,
-    *,
+    session: Any = None,
+    max_sources: int = DEFAULT_MAX_SOURCES,
+) -> List[Dict[str, Any]]:
+    del session
+
+    queries = build_query_variants(question_text, max_queries=8)
+    collected: List[SourceCandidate] = []
+
+    collected.extend(_official_catalog_candidates(question_text))
+
+    for query in queries[:6]:
+        collected.extend(_fetch_google_news_rss(query, question_text, max_records=6))
+        collected.extend(_fetch_gdelt_sources(query, question_text, max_records=6))
+
+    collected = _dedupe_sources(collected)
+    selected = _select_balanced_sources(collected, max_sources=max_sources)
+
+    return [asdict(source) for source in selected]
+
+
+def research_payload(
+    question_text: str,
+    session: Any = None,
     max_sources: int = DEFAULT_MAX_SOURCES,
 ) -> Dict[str, Any]:
-    queries = build_query_variants(question_text)
-    gathered: List[SourceCandidate] = []
+    sources = research_sources(question_text, session=session, max_sources=max_sources)
+    source_candidates = [SourceCandidate(**source) for source in sources]
 
-    # 1) feste offizielle Einstiegspunkte
-    gathered.extend(_official_catalog_candidates(question_text))
+    reasoning = build_reasoning_from_sources(question_text, source_candidates)
+    probability = _probability_from_sources(source_candidates)
 
-    # 2) öffentliche Suchquellen
-    for query in queries:
-        gathered.extend(_fetch_gdelt_sources(query, question_text, max_records=6))
-        gathered.extend(_fetch_google_news_rss(query, question_text, max_records=5))
-
-    deduped = _dedupe_sources(gathered)
-    selected = _select_balanced_sources(deduped, max_sources=max_sources)
-    counts = _source_type_counts(selected)
-    reasoning = build_reasoning_from_sources(question_text, selected)
+    diagnostics = {
+        "query_count": len(build_query_variants(question_text, max_queries=8)),
+        "source_count": len(source_candidates),
+        "source_type_counts": _source_type_counts(source_candidates),
+        "stance_counts": _stance_counts(source_candidates),
+    }
 
     return {
-        "question_text": question_text,
-        "queries": queries,
-        "sources": [asdict(s) for s in selected],
-        "source_counts": counts,
+        "sources": sources,
         "reasoning": reasoning,
+        "probability_hint": probability,
+        "summary": build_summary(question_text, probability, reasoning),
+        "diagnostics": diagnostics,
     }
