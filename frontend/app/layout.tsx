@@ -6,14 +6,6 @@ export const metadata: Metadata = {
   title: "4CPA Prognostic Engine",
   description: "4cpa - see tomorrow, today",
   applicationName: "4CPA Prognostic Engine",
-  icons: {
-    icon: [
-      { url: "/icon-v3.png", type: "image/png", sizes: "512x512" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
-    shortcut: ["/icon-v3.png"],
-    apple: [{ url: "/apple-touch-icon-v3.png", sizes: "180x180", type: "image/png" }],
-  },
   openGraph: {
     title: "4CPA Prognostic Engine",
     description: "4cpa - see tomorrow, today",
