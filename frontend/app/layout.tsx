@@ -8,11 +8,11 @@ export const metadata: Metadata = {
   applicationName: "4CPA Prognostic Engine",
   icons: {
     icon: [
-      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+      { url: "/icon-v2.png", type: "image/png", sizes: "512x512" },
       { url: "/favicon.ico", sizes: "any" },
     ],
-    shortcut: ["/icon.png"],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/icon-v2.png"],
+    apple: [{ url: "/apple-touch-icon-v2.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     title: "4CPA Prognostic Engine",
