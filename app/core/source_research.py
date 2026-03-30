@@ -10,7 +10,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 
-USER_AGENT = "prognostic-research-bot/0.2 (+forecasting-mvp)"
+USER_AGENT = "prognostic-research-bot/0.3 (+forecasting-mvp)"
 HTTP_TIMEOUT_SECONDS = 12
 DEFAULT_MAX_SOURCES = 15
 
@@ -73,6 +73,7 @@ MAJOR_MEDIA_DOMAINS = {
     "cnn.com",
     "aljazeera.com",
     "economist.com",
+    "haaretz.com",
 }
 
 
@@ -110,6 +111,7 @@ MAJOR_MEDIA_PUBLISHER_PATTERNS = (
     "cnn",
     "al jazeera",
     "economist",
+    "haaretz",
 )
 
 
@@ -215,7 +217,7 @@ def _question_kind(question_text: str) -> str:
         return "world_war"
     if "eu zer" in q or "eu breakup" in q or "european union breakup" in q:
         return "eu_breakup"
-    if "staat" in q and ("kollaps" in q or "collapse" in q):
+    if ("staat" in q or "state" in q) and ("kollaps" in q or "collapse" in q):
         return "state_collapse"
     if "krieg" in q or "war" in q or "conflict" in q:
         return "war"
@@ -299,6 +301,8 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
         "us and china",
         "multiple major powers",
         "global escalation",
+        "broader war",
+        "broader conflict",
     )
     regional_escalation_terms = (
         "missile",
@@ -312,6 +316,11 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
         "conflict widens",
         "regional war",
         "regional conflict",
+        "ground assault",
+        "new front",
+        "houthi",
+        "houthis",
+        "red sea",
     )
 
     eu_breakup_terms = (
@@ -419,6 +428,9 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "reaffirmed commitment",
         "restraint",
         "containment",
+        "talks",
+        "negotiation",
+        "diplomacy",
     )
     uncertainty_terms = (
         "uncertain",
@@ -442,6 +454,7 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "article 5",
         "global escalation",
         "multiple major powers",
+        "broader global conflict",
     )
     world_war_direct_contra = (
         "ceasefire",
@@ -451,6 +464,10 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "regional conflict",
         "conflict remains regional",
         "no broader war",
+        "talks with iran",
+        "held talks with iran",
+        "diplomatic channel",
+        "negotiation",
     )
 
     pro_hits = sum(1 for term in pro_terms_general if term in text)
@@ -755,22 +772,63 @@ def _source_type_counts(sources: List[SourceCandidate]) -> Dict[str, int]:
 def _min_relevance_threshold(question_text: str) -> float:
     q_kind = _question_kind(question_text)
     if q_kind == "world_war":
-        return 0.22
+        return 0.16
     if q_kind in {"eu_breakup", "state_collapse"}:
         return 0.18
     return 0.12
 
 
+def _is_irrelevant_for_question(question_text: str, source: SourceCandidate) -> bool:
+    q_kind = _question_kind(question_text)
+    text = _normalize_text("%s %s %s" % (source.title, source.summary, source.publisher))
+
+    if q_kind == "world_war":
+        hard_irrelevant_terms = (
+            "coal-fired power",
+            "lng import risks",
+            "oil prices",
+            "oil pares gains",
+            "stocks",
+            "inflation only",
+            "earnings",
+            "bond yields",
+            "trade deficit",
+            "shipping rates",
+        )
+        if any(term in text for term in hard_irrelevant_terms):
+            return True
+
+        # sehr niedrige Relevanz plus nur wirtschaftlicher/indirekter Zusammenhang rauswerfen
+        if source.relevance_score <= 0.06 and (
+            "oil" in text
+            or "lng" in text
+            or "coal" in text
+            or "shipping" in text
+            or "economy" in text
+            or "market" in text
+            or "prices" in text
+        ):
+            return True
+
+    return False
+
+
 def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, question_text: str) -> List[SourceCandidate]:
     min_relevance = _min_relevance_threshold(question_text)
+    q_kind = _question_kind(question_text)
 
-    filtered = []
+    filtered: List[SourceCandidate] = []
     for s in sources:
+        if _is_irrelevant_for_question(question_text, s):
+            continue
         if s.relevance_score < min_relevance:
             continue
-        if _question_kind(question_text) == "world_war" and s.stance == "neutral" and s.relevance_score < 0.35:
+        if q_kind == "world_war" and s.stance == "neutral" and s.relevance_score < 0.20:
             continue
         filtered.append(s)
+
+    if not filtered:
+        filtered = [s for s in sources if not _is_irrelevant_for_question(question_text, s)]
 
     if not filtered:
         filtered = list(sources)
@@ -783,26 +841,41 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, q
         "other": [],
     }
 
-    for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength), reverse=True):
+    for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength, x.relevance_score), reverse=True):
         by_type.setdefault(s.source_type, []).append(s)
 
     selected: List[SourceCandidate] = []
 
-    quotas = [
-        ("wire", 3),
-        ("research", 2),
-        ("official", 2),
-        ("major_media", 3),
-    ]
+    if q_kind == "world_war":
+        quotas = [
+            ("wire", 4),
+            ("major_media", 3),
+            ("research", 1),
+            ("official", 1),
+        ]
+    else:
+        quotas = [
+            ("wire", 3),
+            ("research", 2),
+            ("official", 2),
+            ("major_media", 3),
+        ]
 
     for source_type, quota in quotas:
-        for item in by_type.get(source_type, [])[:quota]:
+        for item in by_type.get(source_type, []):
             if len(selected) >= max_sources:
                 break
-            if item not in selected:
-                selected.append(item)
+            if item in selected:
+                continue
+            selected.append(item)
+            if sum(1 for s in selected if s.source_type == source_type) >= quota:
+                break
 
-    remainder = [s for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength), reverse=True) if s not in selected]
+    remainder = [
+        s
+        for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength, x.relevance_score), reverse=True)
+        if s not in selected
+    ]
     for item in remainder:
         if len(selected) >= max_sources:
             break
