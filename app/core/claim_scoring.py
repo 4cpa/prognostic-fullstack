@@ -49,7 +49,7 @@ def _independence_weight(claim: Dict[str, Any], claims: List[Dict[str, Any]]) ->
     """
     Downweights sources from the same domain and nearly identical claims.
     """
-    source_url = claim.get("source_url", "")
+    source_url = str(claim.get("source_url", ""))
     domain = _domain_from_url(source_url)
     text_key = _claim_text_key(str(claim.get("claim_text", "")))
 
@@ -60,9 +60,9 @@ def _independence_weight(claim: Dict[str, Any], claims: List[Dict[str, Any]]) ->
         other_domain = _domain_from_url(str(other.get("source_url", "")))
         other_text_key = _claim_text_key(str(other.get("claim_text", "")))
 
-        if other_domain and other_domain == domain:
+        if domain and other_domain == domain:
             same_domain_count += 1
-        if other_text_key and other_text_key == text_key:
+        if text_key and other_text_key == text_key:
             same_text_count += 1
 
     domain_penalty = min(0.30, max(0, same_domain_count - 1) * 0.08)
@@ -77,6 +77,7 @@ def _specificity_weight(claim_text: str) -> float:
         return 0.4
 
     score = 0.45
+    text_lower = text.lower()
 
     if len(text) >= 50:
         score += 0.10
@@ -84,9 +85,9 @@ def _specificity_weight(claim_text: str) -> float:
         score += 0.08
     if re.search(r"\b\d+(\.\d+)?%?\b", text):
         score += 0.06
-    if any(token in text.lower() for token in ["according to", "reported", "confirmed", "announced", "stated"]):
+    if any(token in text_lower for token in ["according to", "reported", "confirmed", "announced", "stated"]):
         score += 0.06
-    if any(token in text.lower() for token in ["official", "commission", "government", "ministry", "nato", "un", "eu"]):
+    if any(token in text_lower for token in ["official", "commission", "government", "ministry", "nato", "un", "eu"]):
         score += 0.05
 
     return round(_clamp(score), 4)
