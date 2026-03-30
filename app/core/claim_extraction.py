@@ -181,7 +181,7 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             return "contra"
 
         if _contains_any(text, weak_world_war_pro):
-            return "pro"
+            return "uncertainty"
 
         if uncertainty_hits >= 1:
             return "uncertainty"
