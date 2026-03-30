@@ -62,66 +62,140 @@ def _keyword_overlap(question_text: str, text: str) -> float:
     return _clamp(overlap / denom, 0.0, 1.0)
 
 
-def _contains_any(text: str, terms: List[str]) -> int:
-    return sum(1 for term in terms if term in text)
+def _question_kind(question_text: str) -> str:
+    q = _lower(question_text)
+
+    if "weltkrieg" in q or "world war" in q:
+        return "world_war"
+    if "eu zer" in q or "eu breakup" in q or "european union breakup" in q:
+        return "eu_breakup"
+    if ("staat" in q or "state" in q) and ("kollaps" in q or "collapse" in q):
+        return "state_collapse"
+    if "krieg" in q or "war" in q or "conflict" in q:
+        return "war"
+    return "general"
+
+
+def _contains_any(text: str, terms: List[str]) -> bool:
+    return any(term in text for term in terms)
 
 
 def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -> str:
     text = _lower(sentence)
-    q = _lower(question_text)
+    q_kind = _question_kind(question_text)
 
     pro_terms = [
         "collapse", "breakup", "disintegration", "fracture", "withdrawal", "exit",
         "war", "escalation", "mobilization", "offensive", "crisis", "sanctions shock",
-        "default", "recession", "bank run", "conflict", "attack", "invasion",
+        "default", "bank run", "conflict", "attack", "invasion",
         "zerbrechen", "zerfall", "krieg", "eskalation", "krise", "angriff", "invasion",
-        "weltkrieg", "world war", "militärschlag", "military strike", "retaliation",
-        "vergeltung", "regional war", "regionalkrieg",
     ]
     contra_terms = [
         "stability", "stable", "continuity", "agreement", "unity", "cooperation",
         "ceasefire", "de-escalation", "institutional continuity", "support package",
-        "reaffirmed commitment", "resilience", "integration",
+        "reaffirmed commitment", "resilience", "integration", "containment", "restraint",
         "stabilität", "einigung", "zusammenhalt", "waffenstillstand", "deeskalation",
-        "kontinuität", "unterstützung", "integration", "diplomatic solution",
-        "diplomatische lösung", "negotiation", "verhandlung", "containment",
-        "eingedämmt", "calm", "beruhigung",
+        "kontinuität", "unterstützung", "integration", "eindämmung", "zurückhaltung",
     ]
     uncertainty_terms = [
         "may", "might", "could", "risk", "warning", "concern", "uncertain",
-        "volatility", "tension", "scenario", "possible",
+        "volatility", "tension", "scenario", "possible", "unlikely", "likely",
         "könnte", "risiko", "warnung", "sorge", "unsicher", "spannung", "szenario",
-        "möglich",
+        "möglich", "wahrscheinlich", "unwahrscheinlich",
     ]
 
-    pro_hits = _contains_any(text, pro_terms)
-    contra_hits = _contains_any(text, contra_terms)
-    uncertainty_hits = _contains_any(text, uncertainty_terms)
+    pro_hits = sum(1 for term in pro_terms if term in text)
+    contra_hits = sum(1 for term in contra_terms if term in text)
+    uncertainty_hits = sum(1 for term in uncertainty_terms if term in text)
 
-    if ("weltkrieg" in q or "world war" in q) and (
-        "ceasefire" in text or "de-escalation" in text or "waffenstillstand" in text or "deeskalation" in text
-    ):
-        contra_hits += 2
+    if q_kind == "world_war":
+        direct_world_war_pro = [
+            "world war",
+            "weltkrieg",
+            "global war",
+            "great power war",
+            "major power war",
+            "global conflict",
+            "broader global conflict",
+            "nato article 5",
+            "article 5",
+            "us-russia direct conflict",
+            "u.s.-russia direct conflict",
+            "us-china direct conflict",
+            "u.s.-china direct conflict",
+            "multiple major powers",
+        ]
+        direct_world_war_contra = [
+            "ceasefire",
+            "de-escalation",
+            "containment",
+            "limited response",
+            "regional conflict",
+            "conflict remains regional",
+            "no broader war",
+            "talks with iran",
+            "diplomatic channel",
+            "negotiation",
+        ]
+        regional_escalation_only = [
+            "ground assault",
+            "red sea shipping route",
+            "shipping route",
+            "hormuz",
+            "missile",
+            "retaliation",
+            "new front",
+            "open new front",
+            "airstrike",
+            "nuclear site",
+            "houthi",
+            "houthis",
+        ]
 
-    if ("weltkrieg" in q or "world war" in q) and (
-        "attack" in text or "retaliation" in text or "mobilization" in text or "offensive" in text
-    ):
-        pro_hits += 2
+        if _contains_any(text, direct_world_war_pro):
+            return "pro"
 
-    if pro_hits >= contra_hits + 1 and pro_hits >= 1:
+        if _contains_any(text, direct_world_war_contra):
+            return "contra"
+
+        if _contains_any(text, regional_escalation_only):
+            return "uncertainty"
+
+        if uncertainty_hits >= 1:
+            return "uncertainty"
+
+        return "background"
+
+    if q_kind == "eu_breakup":
+        direct_eu_breakup_pro = [
+            "leave the eu",
+            "withdrawal from the eu",
+            "eu exit",
+            "member state exit",
+            "european union breakup",
+            "eu disintegration",
+        ]
+        direct_eu_breakup_contra = [
+            "unity",
+            "integration",
+            "reaffirmed commitment",
+            "institutional continuity",
+            "support package",
+        ]
+
+        if _contains_any(text, direct_eu_breakup_pro):
+            return "pro"
+        if _contains_any(text, direct_eu_breakup_contra):
+            return "contra"
+
+    if pro_hits > contra_hits and pro_hits >= 1:
         return "pro"
-
-    if contra_hits >= pro_hits + 1 and contra_hits >= 1:
+    if contra_hits > pro_hits and contra_hits >= 1:
         return "contra"
-
-    if fallback_stance == "pro":
-        return "pro"
-    if fallback_stance == "contra":
-        return "contra"
-
     if uncertainty_hits >= 1:
         return "uncertainty"
-
+    if fallback_stance in CLAIM_TYPES:
+        return fallback_stance
     return "background"
 
 
@@ -146,15 +220,19 @@ def _claim_confidence(
         "research": 0.05,
         "major_media": 0.03,
         "other": 0.0,
-        "fallback": -0.08,
     }.get(source_type, 0.0)
 
     claim_type_bonus = {
-        "pro": 0.05,
-        "contra": 0.05,
+        "pro": 0.04,
+        "contra": 0.04,
         "uncertainty": 0.02,
-        "background": -0.03,
+        "background": 0.0,
     }.get(claim_type, 0.0)
+
+    q_kind = _question_kind(question_text)
+    if q_kind == "world_war" and claim_type == "pro":
+        # Für Weltkrieg nur vorsichtig pro bewerten
+        claim_type_bonus = 0.01
 
     score = (
         relevance * 0.30
@@ -232,7 +310,6 @@ def extract_claims_from_source(
             continue
 
         claim_type = _infer_claim_type(question_text, sentence, fallback_stance)
-
         if claim_type == "background":
             continue
 
@@ -291,17 +368,13 @@ def extract_claims_from_sources(
 
 def extract_claims(
     question_text: str,
-    sources: Optional[List[Dict[str, Any]]] = None,
+    sources: List[Dict[str, Any]],
     session: Any = None,
-    *,
-    max_claims_per_source: int = 3,
-    max_total_claims: int = 30,
 ) -> List[Dict[str, Any]]:
-    del session
-    payload = extract_claims_from_sources(
+    result = extract_claims_from_sources(
         question_text,
-        sources or [],
-        max_claims_per_source=max_claims_per_source,
-        max_total_claims=max_total_claims,
+        sources,
+        max_claims_per_source=3,
+        max_total_claims=30,
     )
-    return payload["claims"]
+    return result.get("claims", [])
