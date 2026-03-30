@@ -126,33 +126,46 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "broader war involving major powers",
             "global military conflict",
         ]
-        direct_world_war_contra = [
+
+        diplomatic_contra = [
             "ceasefire",
+            "ceasefire talks",
             "de-escalation",
             "containment",
             "limited response",
-            "regional conflict",
             "conflict remains regional",
             "no broader war",
             "talks with iran",
             "held talks with iran",
             "diplomatic channel",
             "negotiation",
+            "negotiations",
             "diplomatic push",
             "backchannel",
             "restraint",
             "avoid wider war",
+            "diplomatic efforts",
+            "peace talks",
+            "mediation",
+            "mediated talks",
+            "indirect talks",
+            "resume talks",
+            "reopen talks",
         ]
-        weak_world_war_pro = [
+
+        military_uncertainty = [
             "ground assault",
             "red sea shipping route",
             "shipping route",
             "hormuz",
+            "strait of hormuz",
             "missile",
+            "missiles",
             "retaliation",
             "new front",
             "open new front",
             "airstrike",
+            "airstrikes",
             "nuclear site",
             "houthi",
             "houthis",
@@ -165,27 +178,30 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "war with israel and the united states",
             "global conflict tracker",
             "regional escalation",
-        ]
-        weak_world_war_contra = [
-            "talks",
-            "diplomacy",
-            "diplomatic",
-            "backchannel",
-            "limited operation",
-            "restraint",
-            "avoid wider war",
+            "regional war",
+            "broader regional war",
+            "shipping disruption",
+            "naval escort",
+            "warship escorts",
+            "more strikes",
+            "additional strikes",
+            "fresh strikes",
+            "new strikes",
+            "troop buildup",
+            "troop deployment",
+            "mobilization",
         ]
 
+        # nur echte Weltkriegssignale -> pro
         if _contains_any(text, direct_world_war_pro):
             return "pro"
 
-        if _contains_any(text, direct_world_war_contra):
+        # diplomatische Eindämmung -> contra
+        if _contains_any(text, diplomatic_contra):
             return "contra"
 
-        if _contains_any(text, weak_world_war_contra):
-            return "contra"
-
-        if _contains_any(text, weak_world_war_pro):
+        # militärische Verschärfung ohne Major-Power-/Weltkriegsbezug -> uncertainty
+        if _contains_any(text, military_uncertainty):
             return "uncertainty"
 
         if uncertainty_hits >= 1:
@@ -273,14 +289,37 @@ def _claim_confidence(
             "direct us-china conflict",
             "direct u.s.-china conflict",
         ]
-        weak_regional_pro = [
+
+        diplomatic_contra = [
+            "ceasefire",
+            "ceasefire talks",
+            "de-escalation",
+            "containment",
+            "talks with iran",
+            "held talks with iran",
+            "diplomatic channel",
+            "negotiation",
+            "negotiations",
+            "backchannel",
+            "avoid wider war",
+            "conflict remains regional",
+            "no broader war",
+            "peace talks",
+            "mediation",
+            "indirect talks",
+            "diplomatic efforts",
+        ]
+
+        military_uncertainty = [
             "ground assault",
             "hormuz",
             "new front",
             "houthi",
             "houthis",
             "airstrike",
+            "airstrikes",
             "missile",
+            "missiles",
             "shipping route",
             "red sea",
             "intercept missiles",
@@ -288,38 +327,30 @@ def _claim_confidence(
             "global conflict tracker",
             "regional escalation",
             "widening conflict",
-        ]
-        direct_contra = [
-            "ceasefire",
-            "de-escalation",
-            "containment",
-            "talks with iran",
-            "held talks with iran",
-            "diplomatic channel",
-            "negotiation",
-            "backchannel",
-            "avoid wider war",
-            "conflict remains regional",
-            "no broader war",
+            "more strikes",
+            "fresh strikes",
+            "troop buildup",
+            "troop deployment",
+            "warship escorts",
         ]
 
         if claim_type == "pro":
             if _contains_any(text, direct_strong_pro):
                 claim_type_bonus = 0.04
-            elif _contains_any(text, weak_regional_pro):
-                claim_type_bonus = 0.01
             else:
                 claim_type_bonus = 0.01
 
         if claim_type == "contra":
-            if _contains_any(text, direct_contra):
+            if _contains_any(text, diplomatic_contra):
                 claim_type_bonus = 0.045
             else:
-                claim_type_bonus = 0.03
+                claim_type_bonus = 0.025
 
         if claim_type == "uncertainty":
-            if _contains_any(text, weak_regional_pro):
-                claim_type_bonus = 0.025
+            if _contains_any(text, military_uncertainty):
+                claim_type_bonus = 0.03
+            else:
+                claim_type_bonus = 0.02
 
     score = (
         relevance * 0.30
