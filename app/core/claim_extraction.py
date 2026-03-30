@@ -124,6 +124,8 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "us-china direct conflict",
             "u.s.-china direct conflict",
             "multiple major powers",
+            "broader war",
+            "wider war involving major powers",
         ]
         direct_world_war_contra = [
             "ceasefire",
@@ -134,10 +136,12 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "conflict remains regional",
             "no broader war",
             "talks with iran",
+            "held talks with iran",
             "diplomatic channel",
             "negotiation",
+            "diplomatic push",
         ]
-        regional_escalation_only = [
+        weak_world_war_pro = [
             "ground assault",
             "red sea shipping route",
             "shipping route",
@@ -150,6 +154,21 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "nuclear site",
             "houthi",
             "houthis",
+            "military escalation",
+            "widening conflict",
+            "conflict widens",
+            "enters second month",
+            "intercept missiles",
+            "launch israel strike",
+        ]
+        weak_world_war_contra = [
+            "talks",
+            "diplomacy",
+            "diplomatic",
+            "backchannel",
+            "limited operation",
+            "restraint",
+            "avoid wider war",
         ]
 
         if _contains_any(text, direct_world_war_pro):
@@ -158,8 +177,11 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
         if _contains_any(text, direct_world_war_contra):
             return "contra"
 
-        if _contains_any(text, regional_escalation_only):
-            return "uncertainty"
+        if _contains_any(text, weak_world_war_contra):
+            return "contra"
+
+        if _contains_any(text, weak_world_war_pro):
+            return "pro"
 
         if uncertainty_hits >= 1:
             return "uncertainty"
@@ -230,9 +252,36 @@ def _claim_confidence(
     }.get(claim_type, 0.0)
 
     q_kind = _question_kind(question_text)
+    text = _lower(sentence)
+
     if q_kind == "world_war" and claim_type == "pro":
-        # Für Weltkrieg nur vorsichtig pro bewerten
-        claim_type_bonus = 0.01
+        direct_strong_pro = [
+            "world war",
+            "weltkrieg",
+            "global war",
+            "great power war",
+            "major power war",
+            "article 5",
+            "multiple major powers",
+        ]
+        weak_regional_pro = [
+            "ground assault",
+            "hormuz",
+            "new front",
+            "houthi",
+            "houthis",
+            "airstrike",
+            "missile",
+            "shipping route",
+            "red sea",
+            "intercept missiles",
+        ]
+        if _contains_any(text, direct_strong_pro):
+            claim_type_bonus = 0.04
+        elif _contains_any(text, weak_regional_pro):
+            claim_type_bonus = 0.015
+        else:
+            claim_type_bonus = 0.01
 
     score = (
         relevance * 0.30
