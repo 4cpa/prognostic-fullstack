@@ -94,16 +94,6 @@ def _clean_text(text: Any, fallback: str = "") -> str:
     return cleaned or fallback
 
 
-def _ensure_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    if isinstance(value, tuple):
-        return list(value)
-    return [value]
-
-
 def _unwrap_sources_payload(result: Any) -> list[Any]:
     if result is None:
         return []
@@ -385,17 +375,27 @@ def _call_research_sources(
     if _research_sources is None:
         return _fallback_research_sources(question_text, question_description, config.max_sources)
 
+    result = None
+
     try:
         result = _research_sources(question_text, session=session, max_sources=config.max_sources)
     except TypeError:
         try:
-            result = _research_sources(question_text, session=session)
+            result = _research_sources(question_text, max_sources=config.max_sources)
         except TypeError:
-            result = _research_sources(question_text)
+            try:
+                result = _research_sources(question_text, session=session)
+            except TypeError:
+                try:
+                    result = _research_sources(question_text)
+                except Exception:
+                    result = None
+            except Exception:
+                result = None
         except Exception:
-            return _fallback_research_sources(question_text, question_description, config.max_sources)
+            result = None
     except Exception:
-        return _fallback_research_sources(question_text, question_description, config.max_sources)
+        result = None
 
     unpacked = _unwrap_sources_payload(result)
     if not unpacked:
@@ -409,6 +409,8 @@ def _call_extract_claims(question_text: str, sources: list[dict[str, Any]], sess
     if _extract_claims is None:
         return _fallback_extract_claims(question_text, sources)
 
+    result = None
+
     try:
         result = _extract_claims(question_text, sources=sources, session=session)
     except TypeError:
@@ -417,12 +419,17 @@ def _call_extract_claims(question_text: str, sources: list[dict[str, Any]], sess
         except TypeError:
             try:
                 result = _extract_claims(question_text, sources)
+            except TypeError:
+                try:
+                    result = _extract_claims(question_text)
+                except Exception:
+                    result = None
             except Exception:
-                return _fallback_extract_claims(question_text, sources)
+                result = None
         except Exception:
-            return _fallback_extract_claims(question_text, sources)
+            result = None
     except Exception:
-        return _fallback_extract_claims(question_text, sources)
+        result = None
 
     unpacked = _unwrap_claims_payload(result)
     if not unpacked:
@@ -435,6 +442,8 @@ def _call_score_claims(claims: list[dict[str, Any]], question_text: str, session
     if _score_claims is None:
         return [_claim_to_dict(item, question_text=question_text) for item in claims]
 
+    result = None
+
     try:
         result = _score_claims(question_text, claims=claims, session=session)
     except TypeError:
@@ -442,13 +451,18 @@ def _call_score_claims(claims: list[dict[str, Any]], question_text: str, session
             result = _score_claims(claims=claims, session=session)
         except TypeError:
             try:
-                result = _score_claims(claims)
+                result = _score_claims(question_text, claims=claims)
+            except TypeError:
+                try:
+                    result = _score_claims(claims)
+                except Exception:
+                    result = None
             except Exception:
-                return [_claim_to_dict(item, question_text=question_text) for item in claims]
+                result = None
         except Exception:
-            return [_claim_to_dict(item, question_text=question_text) for item in claims]
+            result = None
     except Exception:
-        return [_claim_to_dict(item, question_text=question_text) for item in claims]
+        result = None
 
     unpacked = _unwrap_claims_payload(result)
     if not unpacked:
