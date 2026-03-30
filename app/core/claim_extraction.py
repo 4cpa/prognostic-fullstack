@@ -115,17 +115,16 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "global war",
             "great power war",
             "major power war",
-            "global conflict",
-            "broader global conflict",
             "nato article 5",
             "article 5",
-            "us-russia direct conflict",
-            "u.s.-russia direct conflict",
-            "us-china direct conflict",
-            "u.s.-china direct conflict",
-            "multiple major powers",
-            "broader war",
-            "wider war involving major powers",
+            "direct conflict between major powers",
+            "direct u.s.-russia conflict",
+            "direct us-russia conflict",
+            "direct u.s.-china conflict",
+            "direct us-china conflict",
+            "multiple major powers at war",
+            "broader war involving major powers",
+            "global military conflict",
         ]
         direct_world_war_contra = [
             "ceasefire",
@@ -140,6 +139,9 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "diplomatic channel",
             "negotiation",
             "diplomatic push",
+            "backchannel",
+            "restraint",
+            "avoid wider war",
         ]
         weak_world_war_pro = [
             "ground assault",
@@ -160,6 +162,9 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "enters second month",
             "intercept missiles",
             "launch israel strike",
+            "war with israel and the united states",
+            "global conflict tracker",
+            "regional escalation",
         ]
         weak_world_war_contra = [
             "talks",
@@ -254,7 +259,7 @@ def _claim_confidence(
     q_kind = _question_kind(question_text)
     text = _lower(sentence)
 
-    if q_kind == "world_war" and claim_type == "pro":
+    if q_kind == "world_war":
         direct_strong_pro = [
             "world war",
             "weltkrieg",
@@ -262,7 +267,11 @@ def _claim_confidence(
             "great power war",
             "major power war",
             "article 5",
-            "multiple major powers",
+            "multiple major powers at war",
+            "direct us-russia conflict",
+            "direct u.s.-russia conflict",
+            "direct us-china conflict",
+            "direct u.s.-china conflict",
         ]
         weak_regional_pro = [
             "ground assault",
@@ -275,13 +284,42 @@ def _claim_confidence(
             "shipping route",
             "red sea",
             "intercept missiles",
+            "war with israel and the united states",
+            "global conflict tracker",
+            "regional escalation",
+            "widening conflict",
         ]
-        if _contains_any(text, direct_strong_pro):
-            claim_type_bonus = 0.04
-        elif _contains_any(text, weak_regional_pro):
-            claim_type_bonus = 0.015
-        else:
-            claim_type_bonus = 0.01
+        direct_contra = [
+            "ceasefire",
+            "de-escalation",
+            "containment",
+            "talks with iran",
+            "held talks with iran",
+            "diplomatic channel",
+            "negotiation",
+            "backchannel",
+            "avoid wider war",
+            "conflict remains regional",
+            "no broader war",
+        ]
+
+        if claim_type == "pro":
+            if _contains_any(text, direct_strong_pro):
+                claim_type_bonus = 0.04
+            elif _contains_any(text, weak_regional_pro):
+                claim_type_bonus = 0.01
+            else:
+                claim_type_bonus = 0.01
+
+        if claim_type == "contra":
+            if _contains_any(text, direct_contra):
+                claim_type_bonus = 0.045
+            else:
+                claim_type_bonus = 0.03
+
+        if claim_type == "uncertainty":
+            if _contains_any(text, weak_regional_pro):
+                claim_type_bonus = 0.025
 
     score = (
         relevance * 0.30
