@@ -74,6 +74,7 @@ MAJOR_MEDIA_DOMAINS = {
     "aljazeera.com",
     "economist.com",
     "haaretz.com",
+    "france24.com",
 }
 
 
@@ -112,6 +113,7 @@ MAJOR_MEDIA_PUBLISHER_PATTERNS = (
     "al jazeera",
     "economist",
     "haaretz",
+    "france 24",
 )
 
 
@@ -225,7 +227,7 @@ def _question_kind(question_text: str) -> str:
 
 
 def _classify_source_type(domain: str, publisher: str = "", title: str = "") -> str:
-    publisher_text = _normalize_text("%s %s" % (publisher or "", title or ""))
+    publisher_text = _normalize_text(f"{publisher or ''} {title or ''}")
 
     if domain in OFFICIAL_DOMAINS or domain.endswith(".gov") or domain.endswith(".int"):
         return "official"
@@ -270,7 +272,7 @@ def _keyword_overlap_score(question_text: str, title: str, summary: str) -> floa
     if not q_tokens:
         return 0.3
 
-    s_tokens = set(_tokenize("%s %s" % (title, summary)))
+    s_tokens = set(_tokenize(f"{title} {summary}"))
     if not s_tokens:
         return 0.2
 
@@ -285,7 +287,7 @@ def _contains_any(text: str, terms: Tuple[str, ...]) -> bool:
 
 def _outcome_specificity_score(question_text: str, title: str, summary: str) -> float:
     q_kind = _question_kind(question_text)
-    text = _normalize_text("%s %s" % (title, summary))
+    text = _normalize_text(f"{title} {summary}")
 
     global_war_terms = (
         "world war",
@@ -295,6 +297,7 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
         "major power war",
         "global conflict",
         "nato article 5",
+        "article 5",
         "u.s. and russia",
         "us and russia",
         "u.s. and china",
@@ -303,6 +306,7 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
         "global escalation",
         "broader war",
         "broader conflict",
+        "wider war involving major powers",
     )
     regional_escalation_terms = (
         "missile",
@@ -321,8 +325,24 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
         "houthi",
         "houthis",
         "red sea",
+        "shipping route",
     )
-
+    containment_terms = (
+        "ceasefire",
+        "de-escalation",
+        "talks with iran",
+        "held talks with iran",
+        "diplomatic channel",
+        "negotiation",
+        "containment",
+        "limited response",
+        "avoid wider war",
+        "no broader war",
+        "regional conflict remains",
+        "conflict remains regional",
+        "restraint",
+        "backchannel",
+    )
     eu_breakup_terms = (
         "member state exit",
         "withdrawal from the eu",
@@ -336,6 +356,8 @@ def _outcome_specificity_score(question_text: str, title: str, summary: str) -> 
     if q_kind == "world_war":
         if _contains_any(text, global_war_terms):
             return 1.0
+        if _contains_any(text, containment_terms):
+            return 0.70
         if _contains_any(text, regional_escalation_terms):
             return 0.28
         return 0.08
@@ -394,7 +416,7 @@ def _question_specific_relevance(question_text: str, title: str, summary: str) -
 
 
 def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, float]:
-    text = _normalize_text("%s %s" % (title, summary))
+    text = _normalize_text(f"{title} {summary}")
     q_kind = _question_kind(question_text)
 
     pro_terms_general = (
@@ -468,6 +490,8 @@ def _infer_stance(question_text: str, title: str, summary: str) -> Tuple[str, fl
         "held talks with iran",
         "diplomatic channel",
         "negotiation",
+        "avoid wider war",
+        "backchannel",
     )
 
     pro_hits = sum(1 for term in pro_terms_general if term in text)
@@ -580,7 +604,7 @@ def _fetch_gdelt_sources(query: str, question_text: str, max_records: int = 8) -
     encoded = urllib.parse.quote(query)
     url = (
         "https://api.gdeltproject.org/api/v2/doc/doc?"
-        "query=%s&mode=ArtList&format=json&maxrecords=%s&sort=HybridRel" % (encoded, max_records)
+        f"query={encoded}&mode=ArtList&format=json&maxrecords={max_records}&sort=HybridRel"
     )
 
     try:
@@ -619,7 +643,7 @@ def _fetch_gdelt_sources(query: str, question_text: str, max_records: int = 8) -
 
 def _fetch_google_news_rss(query: str, question_text: str, max_records: int = 8) -> List[SourceCandidate]:
     encoded = urllib.parse.quote(query)
-    url = "https://news.google.com/rss/search?q=%s&hl=en-US&gl=US&ceid=US:en" % encoded
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
 
     try:
         root = _safe_xml_get(url)
@@ -721,6 +745,9 @@ def build_query_variants(question_text: str, max_queries: int = 8) -> List[str]:
                 "great power war risk 2026 Reuters official",
                 "global war escalation risk 2026 Reuters AP",
                 "NATO UN major power conflict warning Reuters",
+                "Iran talks containment wider war Reuters",
+                "diplomatic efforts avoid wider war Iran Reuters",
+                "conflict remains regional Iran Reuters",
             ]
         )
 
@@ -734,10 +761,10 @@ def build_query_variants(question_text: str, max_queries: int = 8) -> List[str]:
 
     queries.extend(
         [
-            "%s Reuters" % q,
-            "%s AP AFP" % q,
-            "%s official statements" % q,
-            "%s think tank analysis" % q,
+            f"{q} Reuters",
+            f"{q} AP AFP",
+            f"{q} official statements",
+            f"{q} think tank analysis",
         ]
     )
 
@@ -780,7 +807,7 @@ def _min_relevance_threshold(question_text: str) -> float:
 
 def _is_irrelevant_for_question(question_text: str, source: SourceCandidate) -> bool:
     q_kind = _question_kind(question_text)
-    text = _normalize_text("%s %s %s" % (source.title, source.summary, source.publisher))
+    text = _normalize_text(f"{source.title} {source.summary} {source.publisher}")
 
     if q_kind == "world_war":
         hard_irrelevant_terms = (
@@ -798,7 +825,6 @@ def _is_irrelevant_for_question(question_text: str, source: SourceCandidate) -> 
         if any(term in text for term in hard_irrelevant_terms):
             return True
 
-        # sehr niedrige Relevanz plus nur wirtschaftlicher/indirekter Zusammenhang rauswerfen
         if source.relevance_score <= 0.06 and (
             "oil" in text
             or "lng" in text
@@ -811,6 +837,60 @@ def _is_irrelevant_for_question(question_text: str, source: SourceCandidate) -> 
             return True
 
     return False
+
+
+def _is_world_war_containment_candidate(source: SourceCandidate) -> bool:
+    text = _normalize_text(f"{source.title} {source.summary} {source.publisher}")
+    terms = (
+        "talks with iran",
+        "held talks with iran",
+        "diplomatic",
+        "diplomacy",
+        "negotiation",
+        "backchannel",
+        "ceasefire",
+        "de-escalation",
+        "containment",
+        "limited response",
+        "no broader war",
+        "avoid wider war",
+        "conflict remains regional",
+        "regional conflict",
+        "restraint",
+    )
+    return any(term in text for term in terms)
+
+
+def _is_world_war_escalation_candidate(source: SourceCandidate) -> bool:
+    text = _normalize_text(f"{source.title} {source.summary} {source.publisher}")
+    direct_terms = (
+        "world war",
+        "weltkrieg",
+        "global war",
+        "great power war",
+        "major power war",
+        "article 5",
+        "multiple major powers",
+        "broader war",
+    )
+    regional_terms = (
+        "ground assault",
+        "houthi",
+        "houthis",
+        "missile",
+        "retaliation",
+        "new front",
+        "open new front",
+        "airstrike",
+        "red sea",
+        "shipping route",
+        "hormuz",
+        "nuclear site",
+        "intercept missiles",
+        "launch israel strike",
+        "conflict widens",
+    )
+    return any(term in text for term in direct_terms) or any(term in text for term in regional_terms)
 
 
 def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, question_text: str) -> List[SourceCandidate]:
@@ -833,6 +913,50 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, q
     if not filtered:
         filtered = list(sources)
 
+    filtered = sorted(
+        filtered,
+        key=lambda x: (x.overall_score, x.signal_strength, x.relevance_score, x.freshness_score),
+        reverse=True,
+    )
+
+    if q_kind == "world_war":
+        selected: List[SourceCandidate] = []
+
+        wire_sources = [s for s in filtered if s.source_type == "wire"]
+        containment_sources = [s for s in filtered if _is_world_war_containment_candidate(s)]
+        escalation_sources = [s for s in filtered if _is_world_war_escalation_candidate(s)]
+        official_sources = [s for s in filtered if s.source_type == "official"]
+        research_sources = [s for s in filtered if s.source_type == "research"]
+
+        def _append_unique(candidates: List[SourceCandidate], limit: int = 1) -> None:
+            added = 0
+            for item in candidates:
+                if item in selected:
+                    continue
+                selected.append(item)
+                added += 1
+                if added >= limit or len(selected) >= max_sources:
+                    break
+
+        _append_unique([s for s in wire_sources if _is_world_war_containment_candidate(s)], limit=1)
+        _append_unique([s for s in wire_sources if _is_world_war_escalation_candidate(s)], limit=1)
+
+        if len(selected) < 2:
+            _append_unique(containment_sources, limit=1)
+        if len(selected) < 3:
+            _append_unique(escalation_sources, limit=2)
+
+        _append_unique(official_sources, limit=1)
+        _append_unique(research_sources, limit=1)
+
+        remainder = [s for s in filtered if s not in selected]
+        for item in remainder:
+            if len(selected) >= max_sources:
+                break
+            selected.append(item)
+
+        return selected[:max_sources]
+
     by_type: Dict[str, List[SourceCandidate]] = {
         "official": [],
         "wire": [],
@@ -841,25 +965,16 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, q
         "other": [],
     }
 
-    for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength, x.relevance_score), reverse=True):
+    for s in filtered:
         by_type.setdefault(s.source_type, []).append(s)
 
     selected: List[SourceCandidate] = []
-
-    if q_kind == "world_war":
-        quotas = [
-            ("wire", 4),
-            ("major_media", 3),
-            ("research", 1),
-            ("official", 1),
-        ]
-    else:
-        quotas = [
-            ("wire", 3),
-            ("research", 2),
-            ("official", 2),
-            ("major_media", 3),
-        ]
+    quotas = [
+        ("wire", 3),
+        ("research", 2),
+        ("official", 2),
+        ("major_media", 3),
+    ]
 
     for source_type, quota in quotas:
         for item in by_type.get(source_type, []):
@@ -871,11 +986,7 @@ def _select_balanced_sources(sources: List[SourceCandidate], max_sources: int, q
             if sum(1 for s in selected if s.source_type == source_type) >= quota:
                 break
 
-    remainder = [
-        s
-        for s in sorted(filtered, key=lambda x: (x.overall_score, x.signal_strength, x.relevance_score), reverse=True)
-        if s not in selected
-    ]
+    remainder = [s for s in filtered if s not in selected]
     for item in remainder:
         if len(selected) >= max_sources:
             break
@@ -890,7 +1001,7 @@ def build_reasoning_from_sources(question_text: str, sources: List[SourceCandida
     uncertainty_points: List[str] = []
 
     for s in sorted(sources, key=lambda x: (x.overall_score, x.signal_strength), reverse=True):
-        bullet = "%s: %s" % (s.publisher, s.title)
+        bullet = f"{s.publisher}: {s.title}"
         if s.stance == "pro" and bullet not in pro_points:
             pro_points.append(bullet)
         elif s.stance == "contra" and bullet not in contra_points:
@@ -928,15 +1039,15 @@ def build_summary(question_text: str, probability: float, reasoning: Dict[str, L
         qualifier = "derzeit deutlich wahrscheinlich"
 
     parts = [
-        'Für die Frage "%s" ist das Eintreten %s (%.1f%%).' % (question_text, qualifier, pct),
+        f'Für die Frage "{question_text}" ist das Eintreten {qualifier} ({pct:.1f}%).'
     ]
 
     if reasoning.get("pro"):
-        parts.append("Pro: %s" % reasoning["pro"][0])
+        parts.append(f"Pro: {reasoning['pro'][0]}")
     if reasoning.get("contra"):
-        parts.append("Contra: %s" % reasoning["contra"][0])
+        parts.append(f"Contra: {reasoning['contra'][0]}")
     if reasoning.get("uncertainties"):
-        parts.append("Unsicherheit: %s" % reasoning["uncertainties"][0])
+        parts.append(f"Unsicherheit: {reasoning['uncertainties'][0]}")
 
     return " ".join(parts)
 
