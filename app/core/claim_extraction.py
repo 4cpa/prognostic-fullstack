@@ -85,23 +85,82 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
     q_kind = _question_kind(question_text)
 
     pro_terms = [
-        "collapse", "breakup", "disintegration", "fracture", "withdrawal", "exit",
-        "war", "escalation", "mobilization", "offensive", "crisis", "sanctions shock",
-        "default", "bank run", "conflict", "attack", "invasion",
-        "zerbrechen", "zerfall", "krieg", "eskalation", "krise", "angriff", "invasion",
+        "collapse",
+        "breakup",
+        "disintegration",
+        "fracture",
+        "withdrawal",
+        "exit",
+        "war",
+        "escalation",
+        "mobilization",
+        "offensive",
+        "crisis",
+        "sanctions shock",
+        "default",
+        "bank run",
+        "conflict",
+        "attack",
+        "invasion",
+        "zerbrechen",
+        "zerfall",
+        "krieg",
+        "eskalation",
+        "krise",
+        "angriff",
+        "invasion",
     ]
     contra_terms = [
-        "stability", "stable", "continuity", "agreement", "unity", "cooperation",
-        "ceasefire", "de-escalation", "institutional continuity", "support package",
-        "reaffirmed commitment", "resilience", "integration", "containment", "restraint",
-        "stabilität", "einigung", "zusammenhalt", "waffenstillstand", "deeskalation",
-        "kontinuität", "unterstützung", "integration", "eindämmung", "zurückhaltung",
+        "stability",
+        "stable",
+        "continuity",
+        "agreement",
+        "unity",
+        "cooperation",
+        "ceasefire",
+        "de-escalation",
+        "institutional continuity",
+        "support package",
+        "reaffirmed commitment",
+        "resilience",
+        "integration",
+        "containment",
+        "restraint",
+        "stabilität",
+        "einigung",
+        "zusammenhalt",
+        "waffenstillstand",
+        "deeskalation",
+        "kontinuität",
+        "unterstützung",
+        "integration",
+        "eindämmung",
+        "zurückhaltung",
     ]
     uncertainty_terms = [
-        "may", "might", "could", "risk", "warning", "concern", "uncertain",
-        "volatility", "tension", "scenario", "possible", "unlikely", "likely",
-        "könnte", "risiko", "warnung", "sorge", "unsicher", "spannung", "szenario",
-        "möglich", "wahrscheinlich", "unwahrscheinlich",
+        "may",
+        "might",
+        "could",
+        "risk",
+        "warning",
+        "concern",
+        "uncertain",
+        "volatility",
+        "tension",
+        "scenario",
+        "possible",
+        "unlikely",
+        "likely",
+        "könnte",
+        "risiko",
+        "warnung",
+        "sorge",
+        "unsicher",
+        "spannung",
+        "szenario",
+        "möglich",
+        "wahrscheinlich",
+        "unwahrscheinlich",
     ]
 
     pro_hits = sum(1 for term in pro_terms if term in text)
@@ -192,15 +251,12 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             "mobilization",
         ]
 
-        # nur echte Weltkriegssignale -> pro
         if _contains_any(text, direct_world_war_pro):
             return "pro"
 
-        # diplomatische Eindämmung -> contra
         if _contains_any(text, diplomatic_contra):
             return "contra"
 
-        # militärische Verschärfung ohne Major-Power-/Weltkriegsbezug -> uncertainty
         if _contains_any(text, military_uncertainty):
             return "uncertainty"
 
