@@ -87,10 +87,18 @@ def _normalize_score(value: Any, default: float = 0.0) -> float:
     return _clamp(parsed, 0.0, 1.0)
 
 
+def _strip_html(text: str) -> str:
+    """Entfernt HTML-Tags (auch ungeschlossene) aus einem String."""
+    text = re.sub(r"<[^>]*>", " ", text)   # geschlossene Tags
+    text = re.sub(r"<[^>]*", " ", text)    # ungeschlossene Tags
+    text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    return " ".join(text.split()).strip()
+
+
 def _clean_text(text: Any, fallback: str = "") -> str:
     if text is None:
         return fallback
-    cleaned = " ".join(str(text).strip().split())
+    cleaned = _strip_html(" ".join(str(text).strip().split()))
     return cleaned or fallback
 
 

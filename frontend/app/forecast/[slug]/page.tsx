@@ -159,12 +159,20 @@ function formatDate(value?: string | null): string {
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+  return html
+    .replace(/<[^>]*>/g, " ")   // geschlossene Tags → Leerzeichen
+    .replace(/<[^>]*/g, " ")    // ungeschlossene Tags (kein >) → Leerzeichen
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function claimText(c: ClaimRecord): string {
   const raw = c.text || c.claim_text || "";
-  return raw.includes("<") ? stripHtml(raw) : raw;
+  if (!raw) return "";
+  const cleaned = raw.includes("<") ? stripHtml(raw) : raw;
+  return cleaned || "—";
 }
 
 // Minimal markdown → React nodes (server-side, no library needed)
