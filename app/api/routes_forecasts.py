@@ -11,7 +11,10 @@ from sqlmodel import Session, select
 from app.core.forecast_engine import generate_forecast
 from app.core.llm_service import set_request_api_key
 from app.core.db import get_session
+from app.core.logger import get_logger
 from app.models import Forecast, Question
+
+log = get_logger("routes.forecasts")
 
 
 router = APIRouter(prefix="/questions", tags=["forecasts"])
@@ -157,6 +160,7 @@ def _build_inputs_hash(question: Any, method: str, method_version: str) -> str:
 def _get_question_or_404(session: Session, question_id: str) -> Question:
     question = session.get(Question, question_id)
     if question is None:
+        log.warning("Question not found: %s", question_id)
         raise HTTPException(status_code=404, detail="Question not found")
     return question
 
@@ -178,11 +182,17 @@ def create_forecast(
     session: Session = Depends(get_session),
     x_anthropic_key: str = Header(default=""),
 ) -> dict[str, Any]:
-    if x_anthropic_key:
+    has_key = bool(x_anthropic_key)
+    if has_key:
         set_request_api_key(x_anthropic_key)
+    log.info("create_forecast question_id=%s language=%s llm=%s", question_id, language, has_key)
     question = _get_question_or_404(session, question_id)
 
-    engine_payload = generate_forecast(question=question, session=session, language=language)
+    try:
+        engine_payload = generate_forecast(question=question, session=session, language=language)
+    except Exception as exc:
+        log.error("generate_forecast failed for question %s: %s", question_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Forecast generation failed") from exc
 
     method = "bayes_logodds_v1"
     inputs_hash = _build_inputs_hash(

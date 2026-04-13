@@ -15,5 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code
 COPY . .
 
+# Log-Verzeichnis anlegen
+RUN mkdir -p /app/logs && chmod 755 /app/logs
+
 # Start server
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

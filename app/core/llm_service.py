@@ -11,6 +11,10 @@ import os
 from contextvars import ContextVar
 from typing import Any, Dict, List
 
+from app.core.logger import get_logger
+
+log = get_logger("llm_service")
+
 try:
     import anthropic as _anthropic_module
     _ANTHROPIC_AVAILABLE = True
@@ -159,7 +163,8 @@ def extract_claims_with_llm(
             )
         return claims
 
-    except Exception:
+    except Exception as exc:
+        log.error("extract_claims_with_llm failed: %s", exc, exc_info=True)
         return []
 
 
@@ -226,5 +231,6 @@ def generate_forecast_explanation(
                 parts.append(chunk)
         return "".join(parts).strip()
 
-    except Exception:
+    except Exception as exc:
+        log.error("generate_forecast_explanation failed: %s", exc, exc_info=True)
         return ""
