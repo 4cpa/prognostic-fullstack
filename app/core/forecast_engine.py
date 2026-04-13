@@ -919,6 +919,7 @@ class ForecastEngine:
         session: Any = None,
         *,
         category: Optional[str] = None,
+        language: str = "de",
     ) -> dict[str, Any]:
         question_text = _question_text(question)
         question_description = _question_description(question)
@@ -964,6 +965,7 @@ class ForecastEngine:
                 top_contra_claims=top_contra_claims,
                 top_uncertainties=top_uncertainties,
                 sources=sources,
+                language=language,
             )
         except Exception:
             pass
@@ -1036,9 +1038,10 @@ def generate_forecast(
     *,
     category: Optional[str] = None,
     config: Optional[EngineConfig] = None,
+    language: str = "de",
 ) -> dict[str, Any]:
     engine = ForecastEngine(config=config)
-    return engine.generate(question=question, session=session, category=category)
+    return engine.generate(question=question, session=session, category=category, language=language)
 
 
 def compute_probability(

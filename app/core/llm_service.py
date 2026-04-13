@@ -41,9 +41,18 @@ Return ONLY valid JSON in this exact shape:
 
 Skip background claims. Keep claim_text concise (max 200 chars)."""
 
-_EXPLANATION_SYSTEM = """\
-Du bist ein professioneller Prognose-Analyst. Schreibe prägnante, datenbasierte Forecast-Erklärungen auf Deutsch.
-Sei direkt, analytisch und vermeide übermäßige Absicherungen. Nutze Markdown-Formatierung."""
+_EXPLANATION_SYSTEM_TEMPLATE = """\
+You are a professional forecasting analyst. Write concise, data-driven forecast explanations.
+Be direct, analytical and avoid excessive hedging. Use Markdown formatting.
+{lang_instruction}"""
+
+_LANG_INSTRUCTIONS: dict[str, str] = {
+    "de": "Write in German (Deutsch).",
+    "en": "Write in English.",
+    "it": "Write in Italian (Italiano).",
+    "fr": "Write in French (Français).",
+    "es": "Write in Spanish (Español).",
+}
 
 
 def _get_client() -> "anthropic.Anthropic | None":
@@ -161,6 +170,7 @@ def generate_forecast_explanation(
     top_contra_claims: List[Dict[str, Any]],
     top_uncertainties: List[Dict[str, Any]],
     sources: List[Dict[str, Any]],
+    language: str = "de",
 ) -> str:
     """
     Generiert eine natürlichsprachliche Forecast-Erklärung mit Claude.
@@ -171,6 +181,9 @@ def generate_forecast_explanation(
     client = _get_client()
     if client is None:
         return ""
+
+    lang_instruction = _LANG_INSTRUCTIONS.get(language.lower(), _LANG_INSTRUCTIONS["de"])
+    explanation_system = _EXPLANATION_SYSTEM_TEMPLATE.format(lang_instruction=lang_instruction)
 
     pct = round(probability * 100.0, 1)
 
@@ -203,7 +216,7 @@ def generate_forecast_explanation(
             system=[
                 {
                     "type": "text",
-                    "text": _EXPLANATION_SYSTEM,
+                    "text": explanation_system,
                     "cache_control": {"type": "ephemeral"},
                 }
             ],

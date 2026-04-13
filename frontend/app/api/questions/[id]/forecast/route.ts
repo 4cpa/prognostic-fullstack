@@ -15,8 +15,9 @@ export async function POST(
 ) {
   const { id } = await params;
   const anthropicKey = req.headers.get("x-anthropic-key") ?? "";
-  const methodVersion =
-    new URL(req.url).searchParams.get("method_version") ?? "v0.1.0";
+  const url = new URL(req.url);
+  const methodVersion = url.searchParams.get("method_version") ?? "v0.1.0";
+  const language = url.searchParams.get("language") ?? "de";
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -27,7 +28,7 @@ export async function POST(
 
   try {
     const res = await fetch(
-      `${getBackendUrl()}/questions/${id}/forecast?method_version=${methodVersion}`,
+      `${getBackendUrl()}/questions/${id}/forecast?method_version=${methodVersion}&language=${language}`,
       {
         method: "POST",
         headers,

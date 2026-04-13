@@ -174,6 +174,7 @@ def _get_latest_forecast(session: Session, question_id: str) -> Forecast | None:
 def create_forecast(
     question_id: str,
     method_version: str = Query(default="v0.1.0"),
+    language: str = Query(default="de"),
     session: Session = Depends(get_session),
     x_anthropic_key: str = Header(default=""),
 ) -> dict[str, Any]:
@@ -181,7 +182,7 @@ def create_forecast(
         set_request_api_key(x_anthropic_key)
     question = _get_question_or_404(session, question_id)
 
-    engine_payload = generate_forecast(question=question, session=session)
+    engine_payload = generate_forecast(question=question, session=session, language=language)
 
     method = "bayes_logodds_v1"
     inputs_hash = _build_inputs_hash(
@@ -273,6 +274,7 @@ def get_latest_forecast_full(
 def recompute_latest_forecast(
     question_id: str,
     method_version: str = Query(default="v0.1.0"),
+    language: str = Query(default="de"),
     session: Session = Depends(get_session),
     x_anthropic_key: str = Header(default=""),
 ) -> dict[str, Any]:
@@ -280,7 +282,7 @@ def recompute_latest_forecast(
         set_request_api_key(x_anthropic_key)
     question = _get_question_or_404(session, question_id)
 
-    engine_payload = generate_forecast(question=question, session=session)
+    engine_payload = generate_forecast(question=question, session=session, language=language)
     forecast = _get_latest_forecast(session, question_id)
 
     method = "bayes_logodds_v1"
