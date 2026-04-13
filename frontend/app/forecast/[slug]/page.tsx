@@ -53,6 +53,11 @@ type ForecastRecord = {
   question_type?: string | null;
 };
 
+type ScenarioRecord = {
+  title: string;
+  description: string;
+};
+
 type FullForecastResponse = {
   question?: QuestionRecord;
   forecast?: ForecastRecord;
@@ -69,6 +74,7 @@ type FullForecastResponse = {
   answer_confidence_band?: string | null;
   answer_rationale_short?: string | null;
   question_type?: string | null;
+  scenarios?: ScenarioRecord[] | null;
 };
 
 // ── Datenzugriff ────────────────────────────────────────────────────────────
@@ -288,6 +294,9 @@ export default async function ForecastDetailPage({ params }: PageProps) {
   const answerLabel   = full.answer_label   ?? forecast.answer_label   ?? null;
   const answerBand    = full.answer_confidence_band ?? forecast.answer_confidence_band ?? null;
   const answerRationale = full.answer_rationale_short ?? forecast.answer_rationale_short ?? null;
+  const questionType  = full.question_type ?? null;
+  const scenarios     = (full.scenarios ?? []).filter((s) => s.title);
+  const isOpenQuestion = questionType === "open" || answerLabel === "analytical";
 
   const probability = full.calibrated_probability ?? full.raw_probability ?? forecast.probability;
   const pctNum = toPercentNum(probability);
@@ -316,59 +325,95 @@ export default async function ForecastDetailPage({ params }: PageProps) {
           {questionText}
         </h1>
 
-        {/* ── Direkte Antwort ── */}
-        <div className={`mb-6 rounded-2xl border-2 p-6 ${TONE_CARD[tone]}`}>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {answerLabel && (
-              <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${TONE_BADGE[tone]}`}>
-                {LABEL_TEXT[answerLabel] ?? answerLabel}
-              </span>
+        {/* ── Offene Frage: Szenarien ── */}
+        {isOpenQuestion ? (
+          <div className="mb-6 space-y-3">
+            {/* Einleitungstext */}
+            {directAnswer && (
+              <p className="text-base leading-7 text-slate-700">{directAnswer}</p>
             )}
-            {answerBand && (
-              <span className="inline-flex rounded-full border border-slate-300 bg-white/70 px-3 py-1 text-xs text-slate-600">
-                {BAND_TEXT[answerBand] ?? answerBand}
-              </span>
+
+            {/* Szenario-Karten */}
+            {scenarios.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {scenarios.map((s, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-blue-200 bg-blue-50 p-5"
+                  >
+                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                      {s.title}
+                    </p>
+                    <p className="text-sm leading-6 text-slate-700">{s.description}</p>
+                  </div>
+                ))}
+              </div>
+            ) : directAnswer ? null : (
+              <p className="text-sm text-slate-500">Keine Szenarien verfügbar.</p>
+            )}
+
+            {/* Kurzbegründung */}
+            {answerRationale && (
+              <p className="text-xs text-slate-500 pt-1">{answerRationale}</p>
             )}
           </div>
+        ) : (
+          <>
+            {/* ── Geschlossene Frage: Einschätzung ── */}
+            <div className={`mb-6 rounded-2xl border-2 p-6 ${TONE_CARD[tone]}`}>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {answerLabel && (
+                  <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${TONE_BADGE[tone]}`}>
+                    {LABEL_TEXT[answerLabel] ?? answerLabel}
+                  </span>
+                )}
+                {answerBand && (
+                  <span className="inline-flex rounded-full border border-slate-300 bg-white/70 px-3 py-1 text-xs text-slate-600">
+                    {BAND_TEXT[answerBand] ?? answerBand}
+                  </span>
+                )}
+              </div>
 
-          <p className="text-lg font-semibold leading-7 text-slate-950">
-            {directAnswer || "Gemini-Antwort wird berechnet…"}
-          </p>
+              <p className="text-lg font-semibold leading-7 text-slate-950">
+                {directAnswer || "Gemini-Antwort wird berechnet…"}
+              </p>
 
-          {answerRationale && (
-            <p className="mt-3 text-sm leading-6 text-slate-700 border-t border-black/10 pt-3">
-              {answerRationale}
-            </p>
-          )}
-        </div>
+              {answerRationale && (
+                <p className="mt-3 text-sm leading-6 text-slate-700 border-t border-black/10 pt-3">
+                  {answerRationale}
+                </p>
+              )}
+            </div>
 
-        {/* ── Wahrscheinlichkeit ── */}
-        {pctNum !== null && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-baseline justify-between mb-2">
-              <span className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
-                Berechnete Wahrscheinlichkeit
-              </span>
-              <span className="text-2xl font-bold text-slate-950">
-                {toPercent(probability)}
-              </span>
-            </div>
-            <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${barColor}`}
-                style={{ width: `${barFill}%` }}
-                role="progressbar"
-                aria-valuenow={barFill}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`Wahrscheinlichkeit: ${pctNum} Prozent`}
-              />
-            </div>
-            <div className="mt-1.5 flex justify-between text-xs text-slate-400">
-              <span>0 %</span>
-              <span>100 %</span>
-            </div>
-          </div>
+            {/* ── Wahrscheinlichkeit ── */}
+            {pctNum !== null && (
+              <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
+                    Berechnete Wahrscheinlichkeit
+                  </span>
+                  <span className="text-2xl font-bold text-slate-950">
+                    {toPercent(probability)}
+                  </span>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${barColor}`}
+                    style={{ width: `${barFill}%` }}
+                    role="progressbar"
+                    aria-valuenow={barFill}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Wahrscheinlichkeit: ${pctNum} Prozent`}
+                  />
+                </div>
+                <div className="mt-1.5 flex justify-between text-xs text-slate-400">
+                  <span>0 %</span>
+                  <span>100 %</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* ── Gemini-Analyse ── */}

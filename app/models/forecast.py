@@ -28,6 +28,8 @@ class ForecastRead(SQLModel):
     answer_label: Optional[str] = None
     answer_confidence_band: Optional[str] = None
     answer_rationale_short: Optional[str] = None
+    question_type: Optional[str] = None
+    scenarios: Optional[List[Dict[str, Any]]] = None
 
     runtime_calibration_meta: Optional[Dict[str, Any]] = None
     calibration_signals: Optional[Dict[str, Any]] = None

@@ -177,11 +177,11 @@ def generate_direct_answer(
     """
     Generiert eine direkte, frage-spezifische Antwort mit Gemini.
 
-    Erkennt selbständig ob die Frage offen (was, wie, wann, wer, wo, warum,
-    wieviel …) oder geschlossen (ja/nein) ist und antwortet entsprechend.
+    Geschlossene Fragen (Ja/Nein): klare Einschätzung mit Wahrscheinlichkeit.
+    Offene Fragen (Was/Wie/Wann/Wer/Wo/Warum): 3-4 konkrete Szenarien/Möglichkeiten,
+    gespeichert als JSON-Array in 'scenarios' und als Markdown in 'direct_answer'.
 
-    Gibt ein leeres Dict zurück bei fehlendem Key oder Fehler —
-    Fallback auf Template-basierte Logik in forecast_engine.py.
+    Gibt leeres Dict zurück bei fehlendem Key oder Fehler.
     """
     client = _get_client()
     if client is None:
@@ -193,33 +193,53 @@ def generate_direct_answer(
     def _fmt(claims: List[Dict[str, Any]]) -> str:
         if not claims:
             return "–"
-        return "\n".join(f"- {c.get('claim_text', '').strip()}" for c in claims[:3])
+        return "\n".join(f"- {c.get('claim_text', '').strip()}" for c in claims[:4])
 
     system = f"""\
-Du bist ein präziser Prognose-Analyst. Deine Aufgabe: Beantworte eine Prognosefrage direkt und korrekt.
+Du bist ein präziser Prognose-Analyst. {lang_instruction}
 
-{lang_instruction}
+FRAGETYP erkennen:
+- GESCHLOSSEN (Ja/Nein): beginnt mit Wird, Werden, Ist, Sind, Kann, Gibt es, Kommt es, Hat, Haben — oder ist klar mit Ja/Nein beantwortbar.
+- OFFEN: beginnt mit Was, Wer, Wann, Wo, Wie, Warum, Welche, Wieviel, Womit, Wozu — oder fragt nach Wert, Zeitpunkt, Person, Ort, Menge, Ursache, Verlauf.
 
-WICHTIG – Fragetyp erkennen:
-- Geschlossene Frage (Ja/Nein): beginnt mit „Wird", „Werden", „Ist", „Sind", „Kann", „Gibt es", „Kommt es", „Hat", „Haben" oder ist eindeutig mit Ja/Nein beantwortbar.
-- Offene Frage: beginnt mit „Was", „Wer", „Wann", „Wo", „Wie", „Warum", „Welche", „Wieviel", „Womit", „Wozu" oder fragt nach Wert, Zeitpunkt, Person, Ort, Menge, Ursache.
-
-Regeln:
-1. Bei geschlossenen Fragen: Nutze die berechnete Wahrscheinlichkeit als Grundlage. Antworte mit einer klaren Einschätzung (wahrscheinlich ja / eher nein / unklar) inklusive Begründung aus den Signalen.
-2. Bei offenen Fragen: KEIN Ja/Nein. Synthetisiere die verfügbare Evidenz zu einer inhaltlichen, direkten Antwort auf die eigentliche Frage. Die Wahrscheinlichkeit darf als Konfidenzindikator erwähnt werden, ist aber nicht das Zentrum.
-3. Sei präzise, grammatikalisch korrekt, ohne Floskeln.
-4. Antworte AUSSCHLIESSLICH als gültiges JSON in diesem exakten Format:
+REGELN FÜR GESCHLOSSENE FRAGEN:
+- Nutze die Wahrscheinlichkeit als Grundlage.
+- Klare Einschätzung: wahrscheinlich ja / eher nein / unklar.
+- Kurze Begründung aus den Signalen.
+- JSON-Format:
 {{
-  "question_type": "closed" oder "open",
-  "direct_answer": "Vollständige, grammatikalisch korrekte Antwort (2-4 Sätze)",
-  "answer_label": "yes|lean_yes|uncertain|lean_no|no|analytical",
-  "answer_confidence_band": "likely|moderate|close_call|unlikely|analytical",
-  "answer_rationale_short": "Ein Satz Kernbegründung"
-}}"""
+  "question_type": "closed",
+  "direct_answer": "2-3 Sätze: Einschätzung + Begründung",
+  "answer_label": "yes|lean_yes|uncertain|lean_no|no",
+  "answer_confidence_band": "likely|moderate|close_call|unlikely",
+  "answer_rationale_short": "Ein Satz Kernbegründung",
+  "scenarios": []
+}}
+
+REGELN FÜR OFFENE FRAGEN:
+- KEINE Wahrscheinlichkeit, KEIN Ja/Nein.
+- Erstelle 3-4 konkrete, realistische Szenarien/Möglichkeiten als direkte Antwort auf die Frage.
+- Jedes Szenario hat einen prägnanten Titel und 1-2 erklärende Sätze.
+- Stütze dich auf die vorhandenen Signale und Quellen.
+- JSON-Format:
+{{
+  "question_type": "open",
+  "direct_answer": "Einleitender Satz der die wichtigsten Möglichkeiten zusammenfasst.",
+  "answer_label": "analytical",
+  "answer_confidence_band": "analytical",
+  "answer_rationale_short": "Ein Satz warum diese Szenarien plausibel sind",
+  "scenarios": [
+    {{"title": "Szenario-Titel", "description": "1-2 Sätze Beschreibung"}},
+    {{"title": "Szenario-Titel", "description": "1-2 Sätze Beschreibung"}},
+    {{"title": "Szenario-Titel", "description": "1-2 Sätze Beschreibung"}}
+  ]
+}}
+
+WICHTIG: Antworte AUSSCHLIESSLICH als gültiges JSON. Grammatikalisch korrekt, präzise, ohne Floskeln."""
 
     user_message = f"""\
 Frage: {question_text}
-Berechnete Wahrscheinlichkeit: {pct}%
+Berechnete Wahrscheinlichkeit (nur für geschlossene Fragen relevant): {pct}%
 
 Pro-Signale:
 {_fmt(top_pro_claims)}
@@ -239,14 +259,23 @@ Antworte als JSON."""
             config=genai_types.GenerateContentConfig(
                 system_instruction=system,
                 response_mime_type="application/json",
-                max_output_tokens=512,
+                max_output_tokens=800,
             ),
         )
         data = json.loads(response.text or "{}")
 
-        # Pflichtfelder prüfen
         if not data.get("direct_answer") or not data.get("answer_label"):
             return {}
+
+        # Szenarien als Liste normalisieren
+        raw_scenarios = data.get("scenarios") or []
+        scenarios: List[Dict[str, str]] = []
+        for s in raw_scenarios:
+            if isinstance(s, dict) and s.get("title"):
+                scenarios.append({
+                    "title": str(s.get("title", "")).strip(),
+                    "description": str(s.get("description", "")).strip(),
+                })
 
         return {
             "direct_answer": str(data["direct_answer"]).strip(),
@@ -254,6 +283,7 @@ Antworte als JSON."""
             "answer_confidence_band": str(data.get("answer_confidence_band", "close_call")),
             "answer_rationale_short": str(data.get("answer_rationale_short", "")).strip(),
             "question_type": str(data.get("question_type", "unknown")),
+            "scenarios": scenarios,
         }
 
     except Exception as exc:

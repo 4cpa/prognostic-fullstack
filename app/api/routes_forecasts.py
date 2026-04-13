@@ -97,6 +97,7 @@ def _forecast_model_to_summary_dict(forecast: Any) -> dict[str, Any]:
 
 
 def _extract_full_payload_from_forecast(forecast: Any) -> dict[str, Any]:
+    diagnostics = _safe_get(forecast, "diagnostics", default={}) or {}
     return {
         "raw_probability": _to_float(_safe_get(forecast, "raw_probability")),
         "calibrated_probability": _to_float(_safe_get(forecast, "calibrated_probability")),
@@ -107,11 +108,13 @@ def _extract_full_payload_from_forecast(forecast: Any) -> dict[str, Any]:
         "top_pro_claims": _safe_get(forecast, "top_pro_claims", default=[]) or [],
         "top_contra_claims": _safe_get(forecast, "top_contra_claims", default=[]) or [],
         "top_uncertainties": _safe_get(forecast, "top_uncertainties", default=[]) or [],
-        "diagnostics": _safe_get(forecast, "diagnostics", default={}) or {},
+        "diagnostics": diagnostics,
         "direct_answer": _safe_get(forecast, "direct_answer"),
         "answer_label": _safe_get(forecast, "answer_label"),
         "answer_confidence_band": _safe_get(forecast, "answer_confidence_band"),
         "answer_rationale_short": _safe_get(forecast, "answer_rationale_short"),
+        "question_type": diagnostics.get("question_type") or _safe_get(forecast, "question_type"),
+        "scenarios": diagnostics.get("scenarios") or [],
     }
 
 
@@ -272,6 +275,8 @@ def get_latest_forecast_full(
         "answer_label": full_payload.get("answer_label"),
         "answer_confidence_band": full_payload.get("answer_confidence_band"),
         "answer_rationale_short": full_payload.get("answer_rationale_short"),
+        "question_type": full_payload.get("question_type"),
+        "scenarios": full_payload.get("scenarios") or [],
     }
 
 
@@ -352,4 +357,6 @@ def recompute_latest_forecast(
         "answer_label": _safe_get(forecast, "answer_label"),
         "answer_confidence_band": _safe_get(forecast, "answer_confidence_band"),
         "answer_rationale_short": _safe_get(forecast, "answer_rationale_short"),
+        "question_type": ((_safe_get(forecast, "diagnostics") or {}).get("question_type")),
+        "scenarios": ((_safe_get(forecast, "diagnostics") or {}).get("scenarios") or []),
     }

@@ -1015,6 +1015,9 @@ class ForecastEngine:
                 probability=calibrated_probability,
             )
 
+        question_type = direct_answer_payload.get("question_type", "unknown")
+        scenarios = direct_answer_payload.get("scenarios", [])
+
         diagnostics: dict[str, Any] = {
             "generated_at": _utcnow_iso(),
             "question_text": question_text,
@@ -1022,6 +1025,8 @@ class ForecastEngine:
             "source_count": len(sources),
             "claim_count": len(claims),
             "probability_model": probability_diagnostics,
+            "question_type": question_type,
+            "scenarios": scenarios,
         }
 
         return {
@@ -1039,10 +1044,12 @@ class ForecastEngine:
             "diagnostics": diagnostics,
             "runtime_calibration_meta": runtime_calibration_meta,
             "calibration_signals": calibration_signals,
-            "direct_answer": direct_answer_payload["direct_answer"],
-            "answer_label": direct_answer_payload["answer_label"],
-            "answer_confidence_band": direct_answer_payload["answer_confidence_band"],
-            "answer_rationale_short": direct_answer_payload["answer_rationale_short"],
+            "direct_answer": direct_answer_payload.get("direct_answer", ""),
+            "answer_label": direct_answer_payload.get("answer_label", "uncertain"),
+            "answer_confidence_band": direct_answer_payload.get("answer_confidence_band", ""),
+            "answer_rationale_short": direct_answer_payload.get("answer_rationale_short", ""),
+            "question_type": question_type,
+            "scenarios": scenarios,
         }
 
 
