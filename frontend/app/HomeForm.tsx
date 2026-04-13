@@ -1,5 +1,6 @@
 "use client";
 
+import { useId, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -18,11 +19,11 @@ type AppError =
   | { kind: "network"; msg: string };
 
 const LANGUAGES = [
-  { code: "de", flag: "🇩🇪", label: "DE" },
-  { code: "en", flag: "🇬🇧", label: "EN" },
-  { code: "it", flag: "🇮🇹", label: "IT" },
-  { code: "fr", flag: "🇫🇷", label: "FR" },
-  { code: "es", flag: "🇪🇸", label: "ES" },
+  { code: "de", flag: "🇩🇪", nativeName: "Deutsch", label: "DE" },
+  { code: "en", flag: "🇬🇧", nativeName: "English", label: "EN" },
+  { code: "it", flag: "🇮🇹", nativeName: "Italiano", label: "IT" },
+  { code: "fr", flag: "🇫🇷", nativeName: "Français", label: "FR" },
+  { code: "es", flag: "🇪🇸", nativeName: "Español", label: "ES" },
 ] as const;
 
 function resolveAtOneYear(): string {
@@ -42,6 +43,14 @@ export default function HomeForm() {
   const [language, setLanguage] = useState<string>("de");
   const [error, setError] = useState<AppError | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Eindeutige IDs für Label–Input-Verknüpfung
+  const textareaId = useId();
+  const errorId = useId();
+  const statusId = useId();
+
+  // Ref für das Live-Region-Element
+  const liveRef = useRef<HTMLDivElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,74 +139,143 @@ export default function HomeForm() {
     }
   }
 
+  const errorMessage =
+    error == null
+      ? null
+      : error.kind === "http" && error.status === 404
+      ? `Ressource nicht gefunden (404): ${error.detail}`
+      : error.kind === "http"
+      ? `Serverfehler (${error.status}): ${error.detail}`
+      : `Verbindungsfehler: ${error.msg}`;
+
   return (
     <div className="w-full space-y-4">
-      {/* Fehleranzeige */}
+      {/*
+        Screenreader-Live-Region für Statusinformationen (Laden, Fehler).
+        aria-live="assertive" unterbricht sofort; "polite" wartet auf Pause.
+      */}
+      <div
+        ref={liveRef}
+        id={statusId}
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {loading && "Forecast wird berechnet, bitte warten…"}
+        {!loading && error && errorMessage}
+      </div>
+
+      {/* Sichtbare Fehleranzeige – role="alert" für sofortige SR-Ankündigung */}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <p className="font-medium">
+        <div
+          id={errorId}
+          role="alert"
+          aria-atomic="true"
+          className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900"
+        >
+          <p className="font-semibold">
             {error.kind === "http" && error.status === 404
               ? "Ressource nicht gefunden (404)"
               : error.kind === "http"
               ? `Serverfehler (${error.status})`
               : "Verbindungsfehler"}
           </p>
-          <p className="mt-0.5 text-xs text-red-600">
+          <p className="mt-1 text-xs text-red-700">
             {error.kind === "network" ? error.msg : error.detail}
           </p>
         </div>
       )}
 
-      {/* Eingabebereich */}
-      <form onSubmit={handleSubmit} className="w-full">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full"
+        aria-busy={loading}
+        noValidate
+      >
+        {/* Label explizit mit htmlFor verknüpft */}
+        <label
+          htmlFor={textareaId}
+          className="mb-2 block text-sm font-medium text-slate-700"
+        >
+          Deine Prognosefrage
+          <span className="ml-1 text-slate-500 font-normal">(Enter zum Absenden)</span>
+        </label>
+
         <div className="relative">
           <textarea
+            id={textareaId}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Deine Frage eingeben… z. B. «Wird es 2026 einen Weltkrieg geben?»"
+            placeholder="z. B. «Wird es 2026 einen Weltkrieg geben?»"
             rows={3}
             required
-            className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-5 py-4 pr-14 text-base text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            disabled={loading}
+            aria-required="true"
+            aria-describedby={error ? errorId : undefined}
+            aria-invalid={error != null ? "true" : undefined}
+            className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-5 py-4 pr-14 text-base text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-300 disabled:opacity-60"
           />
+
           <button
             type="submit"
             disabled={!question.trim() || loading}
-            className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:opacity-30"
-            aria-label="Forecast erzeugen"
+            aria-label={loading ? "Forecast wird berechnet…" : "Forecast erzeugen"}
+            className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           >
             {loading ? (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+                focusable="false"
+              >
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
             ) : (
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                aria-hidden="true"
+                focusable="false"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             )}
           </button>
         </div>
 
-        {/* Sprach-Auswahl */}
-        <div className="mt-3 flex items-center gap-1.5">
-          <span className="mr-1 text-xs text-slate-400">Sprache:</span>
-          {LANGUAGES.map((lang) => (
-            <button
-              key={lang.code}
-              type="button"
-              onClick={() => setLanguage(lang.code)}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                language === lang.code
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
-              }`}
-            >
-              <span>{lang.flag}</span>
-              <span>{lang.label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Sprachauswahl als semantische Gruppe */}
+        <fieldset className="mt-4 border-0 p-0">
+          <legend className="mb-2 text-xs font-medium text-slate-600">
+            Antwortsprache wählen
+          </legend>
+          <div className="flex flex-wrap gap-2" role="group">
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setLanguage(lang.code)}
+                aria-pressed={language === lang.code}
+                aria-label={`${lang.nativeName}${language === lang.code ? " (aktiv)" : ""}`}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition min-h-[44px] ${
+                  language === lang.code
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800"
+                }`}
+              >
+                {/* Flag-Emoji als dekorativ markieren */}
+                <span aria-hidden="true">{lang.flag}</span>
+                <span>{lang.label}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </form>
     </div>
   );

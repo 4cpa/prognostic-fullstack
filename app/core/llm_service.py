@@ -1,7 +1,8 @@
 """
 Gemini-API-Integration für Claim-Extraktion und Forecast-Erklärung.
+Verwendet das neue google-genai SDK (>= 1.0).
 
-Beide Funktionen fallen auf die regelbasierte Pipeline zurück,
+Alle Funktionen fallen auf regelbasierte Fallbacks zurück,
 wenn kein API-Key gesetzt ist oder ein Fehler auftritt.
 """
 from __future__ import annotations
@@ -15,12 +16,13 @@ from app.core.logger import get_logger
 log = get_logger("llm_service")
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     _GENAI_AVAILABLE = True
 except ImportError:
     _GENAI_AVAILABLE = False
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 _CLAIM_EXTRACTION_SYSTEM = """\
 You are a forecasting analyst. Extract claims from the given source that are relevant to the forecasting question.
@@ -54,42 +56,40 @@ def _get_api_key() -> str:
     return os.getenv("GEMINI_API_KEY", "").strip()
 
 
-def _get_model(system_instruction: str) -> "genai.GenerativeModel | None":
+def _get_client() -> "genai.Client | None":
     if not _GENAI_AVAILABLE:
-        log.warning("google-generativeai not installed")
+        log.warning("google-genai nicht installiert")
         return None
     api_key = _get_api_key()
     if not api_key:
-        log.warning("GEMINI_API_KEY not set — LLM disabled")
+        log.warning("GEMINI_API_KEY nicht gesetzt — LLM deaktiviert")
         return None
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(
-        model_name=MODEL,
-        system_instruction=system_instruction,
-    )
+    return genai.Client(api_key=api_key)
 
 
 def generate_search_queries(question_text: str) -> List[str]:
     """
-    Generiert 4 gezielte Google-News-Suchanfragen für eine beliebige Prognosefrage.
+    Generiert 4 gezielte Suchanfragen für eine Prognosefrage.
     Gibt leere Liste zurück wenn kein API-Key oder Fehler.
     """
+    client = _get_client()
+    if client is None:
+        return []
+
     system = (
         "You are a research assistant helping gather evidence for a forecasting question. "
         "Generate exactly 4 short Google News search queries (2–5 words each) that cover "
         "different angles: the core event, opposing signals, expert/official statements, and recent developments. "
         'Return ONLY valid JSON: {"queries": ["q1", "q2", "q3", "q4"]}'
     )
-    model = _get_model(system)
-    if model is None:
-        return []
-
     user_message = f'Forecasting question: "{question_text}"\n\nGenerate 4 search queries.'
 
     try:
-        response = model.generate_content(
-            user_message,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system,
                 response_mime_type="application/json",
                 max_output_tokens=256,
             ),
@@ -98,7 +98,7 @@ def generate_search_queries(question_text: str) -> List[str]:
         queries = data.get("queries", [])
         return [str(q).strip() for q in queries if str(q).strip()][:5]
     except Exception as exc:
-        log.error("generate_search_queries failed: %s", exc)
+        log.error("generate_search_queries fehlgeschlagen: %s", exc)
         return []
 
 
@@ -108,12 +108,10 @@ def extract_claims_with_llm(
 ) -> List[Dict[str, Any]]:
     """
     Extrahiert Claims aus einer Quelle mit Gemini.
-
-    Gibt eine leere Liste zurück wenn kein API-Key verfügbar
-    oder ein Fehler auftritt (Fallback auf regelbasierte Logik).
+    Gibt leere Liste zurück bei fehlendem Key oder Fehler.
     """
-    model = _get_model(_CLAIM_EXTRACTION_SYSTEM)
-    if model is None:
+    client = _get_client()
+    if client is None:
         return []
 
     title = (source.get("title") or "").strip()
@@ -132,17 +130,17 @@ def extract_claims_with_llm(
     )
 
     try:
-        response = model.generate_content(
-            user_message,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=_CLAIM_EXTRACTION_SYSTEM,
                 response_mime_type="application/json",
                 max_output_tokens=1024,
             ),
         )
 
-        text = response.text or "{}"
-        data = json.loads(text)
-
+        data = json.loads(response.text or "{}")
         freshness = float(source.get("freshness_score") or 0.45)
         source_url = source.get("url") or ""
 
@@ -164,7 +162,7 @@ def extract_claims_with_llm(
         return claims
 
     except Exception as exc:
-        log.error("extract_claims_with_llm failed: %s", exc, exc_info=True)
+        log.error("extract_claims_with_llm fehlgeschlagen: %s", exc, exc_info=True)
         return []
 
 
@@ -179,16 +177,14 @@ def generate_forecast_explanation(
 ) -> str:
     """
     Generiert eine natürlichsprachliche Forecast-Erklärung mit Gemini.
-
-    Gibt einen leeren String zurück bei fehlendem API-Key oder Fehler
-    (Fallback auf Template-basierte Erklärung in forecast_engine.py).
+    Gibt leeren String zurück bei fehlendem Key oder Fehler.
     """
-    lang_instruction = _LANG_INSTRUCTIONS.get(language.lower(), _LANG_INSTRUCTIONS["de"])
-    explanation_system = _EXPLANATION_SYSTEM_TEMPLATE.format(lang_instruction=lang_instruction)
-
-    model = _get_model(explanation_system)
-    if model is None:
+    client = _get_client()
+    if client is None:
         return ""
+
+    lang_instruction = _LANG_INSTRUCTIONS.get(language.lower(), _LANG_INSTRUCTIONS["de"])
+    system = _EXPLANATION_SYSTEM_TEMPLATE.format(lang_instruction=lang_instruction)
 
     pct = round(probability * 100.0, 1)
 
@@ -214,17 +210,16 @@ def generate_forecast_explanation(
     )
 
     try:
-        parts: List[str] = []
-        response = model.generate_content(
-            user_message,
-            generation_config=genai.GenerationConfig(max_output_tokens=1024),
-            stream=True,
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system,
+                max_output_tokens=1024,
+            ),
         )
-        for chunk in response:
-            if chunk.text:
-                parts.append(chunk.text)
-        return "".join(parts).strip()
+        return (response.text or "").strip()
 
     except Exception as exc:
-        log.error("generate_forecast_explanation failed: %s", exc, exc_info=True)
+        log.error("generate_forecast_explanation fehlgeschlagen: %s", exc, exc_info=True)
         return ""

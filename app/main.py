@@ -14,6 +14,17 @@ log = get_logger("api")
 
 app = FastAPI(title="Prognostic API")
 
+# --- Prometheus-Metriken ---
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        excluded_handlers=["/metrics", "/health"],
+    ).instrument(app).expose(app, include_in_schema=False)
+except ImportError:
+    log.warning("prometheus-fastapi-instrumentator nicht installiert — /metrics deaktiviert")
+
 
 @app.middleware("http")
 async def _request_log(request: Request, call_next):

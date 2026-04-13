@@ -1,0 +1,78 @@
+name: CI – Tests
+
+on:
+  push:
+    branches: ["main", "feature/**", "fix/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: pytest (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: prognostic
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: prognosticdb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://prognostic:testpass@localhost:5432/prognosticdb_test
+      GEMINI_API_KEY: ""
+      LOG_DIR: logs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Create log directory
+        run: mkdir -p logs
+
+      - name: Run unit tests
+        run: pytest tests/unit -m unit --junitxml=logs/junit-unit.xml
+
+      - name: Run integration tests
+        run: pytest tests/integration -m integration --junitxml=logs/junit-integration.xml
+
+      - name: Upload test logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-py${{ matrix.python-version }}
+          path: |
+            logs/test.log
+            logs/junit-unit.xml
+            logs/junit-integration.xml
+          retention-days: 14
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: logs/junit-*.xml
+          check_name: Test Results (Python ${{ matrix.python-version }})
+          fail_on_failure: true

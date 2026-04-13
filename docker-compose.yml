@@ -44,5 +44,18 @@ services:
     mem_limit: 512m
     cpus: 0.5
 
+  # --- Uptime Kuma: Endpoint-Monitoring & Alerting ---
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: forecast-uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+    ports:
+      - "127.0.0.1:3001:3001"
+    mem_limit: 256m
+    cpus: 0.25
+
 volumes:
   postgres_data:
+  uptime_kuma_data:

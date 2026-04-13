@@ -10,7 +10,6 @@ const OG_IMAGE = `${BASE_URL}/social-preview.png`;
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
-  // ── Basis ────────────────────────────────────────────────────────────────
   title: {
     default: TITLE,
     template: `%s · 4CPA Prognostic`,
@@ -28,7 +27,6 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
   alternates: { canonical: BASE_URL },
 
-  // ── Open Graph — WhatsApp, Telegram, Signal, iMessage, Messenger ────────
   openGraph: {
     type: "website",
     url: BASE_URL,
@@ -48,7 +46,6 @@ export const metadata: Metadata = {
     ],
   },
 
-  // ── Twitter / X Card — auch von diversen Apps als Fallback genutzt ──────
   twitter: {
     card: "summary_large_image",
     site: "@4cpa",
@@ -65,7 +62,6 @@ export const metadata: Metadata = {
     ],
   },
 
-  // ── Apple / iOS iMessage & Safari ────────────────────────────────────────
   appleWebApp: {
     capable: true,
     title: TITLE,
@@ -73,7 +69,6 @@ export const metadata: Metadata = {
     startupImage: OG_IMAGE,
   },
 
-  // ── Icons — Favicon, Apple Touch Icon, Android ───────────────────────────
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -85,7 +80,6 @@ export const metadata: Metadata = {
     shortcut: "/favicon.ico",
   },
 
-  // ── Weitere Plattform-Hints ───────────────────────────────────────────────
   category: "technology",
   classification: "Forecast / Prediction Tool",
   referrer: "strict-origin-when-cross-origin",
@@ -96,7 +90,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Viewport separat exportieren (Next.js 14+ Anforderung)
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -115,46 +108,61 @@ export default function RootLayout({
   return (
     <html lang="de">
       <head>
-        {/* iMessage / iOS Link-Preview: explizite og:image-Tags als Fallback */}
         <meta property="og:image" content={OG_IMAGE} />
         <meta property="og:image:secure_url" content={OG_IMAGE} />
         <meta property="og:image:type" content="image/png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="4CPA Prognostic Engine" />
-
-        {/* WhatsApp liest og:image:url als explizites Attribut */}
         <meta property="og:image:url" content={OG_IMAGE} />
-
-        {/* Android / Chrome PWA Manifest */}
         <link rel="manifest" href="/manifest.json" />
-
-        {/* Microsoft Tiles (Windows / Edge) */}
         <meta name="msapplication-TileColor" content="#0f172a" />
         <meta name="msapplication-TileImage" content="/icon.png" />
         <meta name="msapplication-config" content="none" />
       </head>
       <body>
+        {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
+        <a href="#main-content" className="skip-link">
+          Zum Hauptinhalt springen
+        </a>
+
         {children}
-        <footer style={{
-          textAlign: "center",
-          padding: "1rem",
-          fontSize: "0.75rem",
-          color: "#94a3b8",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}>
+
+        <footer
+          aria-label="Seiteninfos"
+          style={{
+            textAlign: "center",
+            padding: "1.5rem 1rem",
+            fontSize: "0.875rem",
+            color: "#475569",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "0.5rem",
+          }}
+        >
           <span>Transivroom Division 2026</span>
           <a
             href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
-            aria-label="Email senden"
-            style={{ color: "#94a3b8", lineHeight: 1 }}
+            aria-label="E-Mail an admin@4cpa.ch senden"
+            style={{ color: "#475569", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="20" height="16" x="2" y="4" rx="2"/>
-              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            {/* Icon dekorativ, Text für Screenreader im aria-label */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <rect width="20" height="16" x="2" y="4" rx="2" />
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
             </svg>
           </a>
         </footer>
