@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ApiKeyBanner from "./ApiKeyBanner";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://4cpa.org"),
@@ -37,7 +38,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de">
-      <body>{children}</body>
+      <body>
+        <ApiKeyBanner />
+        {children}
+      </body>
     </html>
   );
 }

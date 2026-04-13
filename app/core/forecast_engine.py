@@ -953,26 +953,46 @@ class ForecastEngine:
             per_bucket=self.config.top_claims_per_bucket,
         )
 
-        summary = _build_summary(
-            question_text=question_text,
-            calibrated_probability=calibrated_probability,
-            confidence=confidence,
-            top_pro_claims=top_pro_claims,
-            top_contra_claims=top_contra_claims,
-            top_uncertainties=top_uncertainties,
-        )
+        # LLM-Erklärung: Claude generiert eine natürlichsprachliche Analyse
+        llm_explanation = ""
+        try:
+            from app.core.llm_service import generate_forecast_explanation
+            llm_explanation = generate_forecast_explanation(
+                question_text=question_text,
+                probability=calibrated_probability,
+                top_pro_claims=top_pro_claims,
+                top_contra_claims=top_contra_claims,
+                top_uncertainties=top_uncertainties,
+                sources=sources,
+            )
+        except Exception:
+            pass
 
-        explanation_md = _build_explanation_md(
-            question_text=question_text,
-            raw_probability=raw_probability,
-            calibrated_probability=calibrated_probability,
-            confidence=confidence,
-            sources=sources,
-            top_pro_claims=top_pro_claims,
-            top_contra_claims=top_contra_claims,
-            top_uncertainties=top_uncertainties,
-            runtime_calibration_meta=runtime_calibration_meta,
-        )
+        if llm_explanation:
+            explanation_md = llm_explanation
+            # Summary = erster Absatz der LLM-Erklärung
+            summary = llm_explanation.split("\n\n")[0].strip() if "\n\n" in llm_explanation else llm_explanation[:500]
+        else:
+            # Fallback auf Template-basierte Generierung
+            summary = _build_summary(
+                question_text=question_text,
+                calibrated_probability=calibrated_probability,
+                confidence=confidence,
+                top_pro_claims=top_pro_claims,
+                top_contra_claims=top_contra_claims,
+                top_uncertainties=top_uncertainties,
+            )
+            explanation_md = _build_explanation_md(
+                question_text=question_text,
+                raw_probability=raw_probability,
+                calibrated_probability=calibrated_probability,
+                confidence=confidence,
+                sources=sources,
+                top_pro_claims=top_pro_claims,
+                top_contra_claims=top_contra_claims,
+                top_uncertainties=top_uncertainties,
+                runtime_calibration_meta=runtime_calibration_meta,
+            )
 
         direct_answer_payload = build_direct_answer(
             question_text=question_text,
