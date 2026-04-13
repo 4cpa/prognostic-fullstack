@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -66,7 +66,7 @@ def add_evidence(
     return ev
 
 
-@router.get("/{question_id}/evidence", response_model=list[EvidenceRead])
+@router.get("/{question_id}/evidence", response_model=List[EvidenceRead])
 def list_evidence(question_id: str, session: Session = Depends(get_session)):
     # Python 3.10 im Container ok: list[EvidenceRead]
     q = session.get(Question, question_id)

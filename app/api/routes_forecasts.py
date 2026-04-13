@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import hashlib
 import json
 
@@ -183,7 +183,7 @@ def create_forecast(
     method_version: str = Query(default="v0.1.0"),
     language: str = Query(default="de"),
     session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     log.info("create_forecast question_id=%s language=%s", question_id, language)
     question = _get_question_or_404(session, question_id)
 
@@ -231,7 +231,7 @@ def create_forecast(
 def get_latest_forecast_summary(
     question_id: str,
     session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     question = _get_question_or_404(session, question_id)
     forecast = _get_latest_forecast(session, question_id)
 
@@ -248,7 +248,7 @@ def get_latest_forecast_summary(
 def get_latest_forecast_full(
     question_id: str,
     session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     question = _get_question_or_404(session, question_id)
     forecast = _get_latest_forecast(session, question_id)
 
@@ -288,7 +288,7 @@ def recompute_latest_forecast(
     method_version: str = Query(default="v0.1.0"),
     language: str = Query(default="de"),
     session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     question = _get_question_or_404(session, question_id)
 
     engine_payload = generate_forecast(question=question, session=session, language=language)

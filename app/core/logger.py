@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-LOG_DIR = os.getenv("LOG_DIR", "/app/logs")
+LOG_DIR = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 
