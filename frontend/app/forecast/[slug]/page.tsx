@@ -158,6 +158,10 @@ function formatDate(value?: string | null): string {
   return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(d);
 }
 
+function urlHostname(url: string): string {
+  try { return new URL(url).hostname; } catch { return url.slice(0, 40); }
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, " ")   // geschlossene Tags → Leerzeichen
@@ -582,15 +586,15 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
                         <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 text-xs text-slate-400 break-all">
                             {c.source_url ? (
                               <a
                                 href={c.source_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="underline hover:text-slate-600"
+                                className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || c.source_url}
+                                {c.source_title || urlHostname(c.source_url)}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
                             ) : c.source_title}
@@ -615,15 +619,15 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
                         <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 text-xs text-slate-400 break-all">
                             {c.source_url ? (
                               <a
                                 href={c.source_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="underline hover:text-slate-600"
+                                className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || c.source_url}
+                                {c.source_title || urlHostname(c.source_url)}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
                             ) : c.source_title}
@@ -648,15 +652,15 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
                         <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 text-xs text-slate-400 break-all">
                             {c.source_url ? (
                               <a
                                 href={c.source_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="underline hover:text-slate-600"
+                                className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || c.source_url}
+                                {c.source_title || urlHostname(c.source_url)}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
                             ) : c.source_title}
