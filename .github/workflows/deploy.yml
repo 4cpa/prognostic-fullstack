@@ -14,12 +14,12 @@ jobs:
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
-        username: deploy
+        username: transiv
         key: ${{ secrets.SERVER_SSH_KEY }}
-        debug: true
         script: |
-          whoami
-          cd /srv/4cpa/prognostic-fullstack
+          cd ~/prognostic-fullstack
           git pull origin main
-          docker-compose down
-          docker-compose up -d --build
+          docker compose build backend frontend
+          docker stop forecast-frontend forecast-backend
+          docker rm forecast-frontend forecast-backend
+          docker compose up -d backend frontend
