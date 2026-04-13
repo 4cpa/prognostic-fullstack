@@ -158,8 +158,13 @@ function formatDate(value?: string | null): string {
   return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(d);
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+}
+
 function claimText(c: ClaimRecord): string {
-  return c.text || c.claim_text || "";
+  const raw = c.text || c.claim_text || "";
+  return raw.includes("<") ? stripHtml(raw) : raw;
 }
 
 // Minimal markdown → React nodes (server-side, no library needed)
@@ -567,7 +572,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {proClaims.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p className="break-words">{claimText(c)}</p>
+                        <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
@@ -600,7 +605,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {contraClaims.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p className="break-words">{claimText(c)}</p>
+                        <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
@@ -633,7 +638,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {uncertainties.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p className="break-words">{claimText(c)}</p>
+                        <p className="break-all">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
