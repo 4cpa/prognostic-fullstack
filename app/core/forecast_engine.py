@@ -996,10 +996,24 @@ class ForecastEngine:
                 runtime_calibration_meta=runtime_calibration_meta,
             )
 
-        direct_answer_payload = build_direct_answer(
-            question_text=question_text,
-            probability=calibrated_probability,
-        )
+        try:
+            from app.core.llm_service import generate_direct_answer
+            direct_answer_payload = generate_direct_answer(
+                question_text=question_text,
+                probability=calibrated_probability,
+                top_pro_claims=top_pro_claims,
+                top_contra_claims=top_contra_claims,
+                top_uncertainties=top_uncertainties,
+                language=language,
+            )
+        except Exception:
+            direct_answer_payload = {}
+
+        if not direct_answer_payload.get("direct_answer"):
+            direct_answer_payload = build_direct_answer(
+                question_text=question_text,
+                probability=calibrated_probability,
+            )
 
         diagnostics: dict[str, Any] = {
             "generated_at": _utcnow_iso(),

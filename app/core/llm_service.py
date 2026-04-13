@@ -166,6 +166,101 @@ def extract_claims_with_llm(
         return []
 
 
+def generate_direct_answer(
+    question_text: str,
+    probability: float,
+    top_pro_claims: List[Dict[str, Any]],
+    top_contra_claims: List[Dict[str, Any]],
+    top_uncertainties: List[Dict[str, Any]],
+    language: str = "de",
+) -> Dict[str, Any]:
+    """
+    Generiert eine direkte, frage-spezifische Antwort mit Gemini.
+
+    Erkennt selbständig ob die Frage offen (was, wie, wann, wer, wo, warum,
+    wieviel …) oder geschlossen (ja/nein) ist und antwortet entsprechend.
+
+    Gibt ein leeres Dict zurück bei fehlendem Key oder Fehler —
+    Fallback auf Template-basierte Logik in forecast_engine.py.
+    """
+    client = _get_client()
+    if client is None:
+        return {}
+
+    lang_instruction = _LANG_INSTRUCTIONS.get(language.lower(), _LANG_INSTRUCTIONS["de"])
+    pct = round(probability * 100.0, 1)
+
+    def _fmt(claims: List[Dict[str, Any]]) -> str:
+        if not claims:
+            return "–"
+        return "\n".join(f"- {c.get('claim_text', '').strip()}" for c in claims[:3])
+
+    system = f"""\
+Du bist ein präziser Prognose-Analyst. Deine Aufgabe: Beantworte eine Prognosefrage direkt und korrekt.
+
+{lang_instruction}
+
+WICHTIG – Fragetyp erkennen:
+- Geschlossene Frage (Ja/Nein): beginnt mit „Wird", „Werden", „Ist", „Sind", „Kann", „Gibt es", „Kommt es", „Hat", „Haben" oder ist eindeutig mit Ja/Nein beantwortbar.
+- Offene Frage: beginnt mit „Was", „Wer", „Wann", „Wo", „Wie", „Warum", „Welche", „Wieviel", „Womit", „Wozu" oder fragt nach Wert, Zeitpunkt, Person, Ort, Menge, Ursache.
+
+Regeln:
+1. Bei geschlossenen Fragen: Nutze die berechnete Wahrscheinlichkeit als Grundlage. Antworte mit einer klaren Einschätzung (wahrscheinlich ja / eher nein / unklar) inklusive Begründung aus den Signalen.
+2. Bei offenen Fragen: KEIN Ja/Nein. Synthetisiere die verfügbare Evidenz zu einer inhaltlichen, direkten Antwort auf die eigentliche Frage. Die Wahrscheinlichkeit darf als Konfidenzindikator erwähnt werden, ist aber nicht das Zentrum.
+3. Sei präzise, grammatikalisch korrekt, ohne Floskeln.
+4. Antworte AUSSCHLIESSLICH als gültiges JSON in diesem exakten Format:
+{{
+  "question_type": "closed" oder "open",
+  "direct_answer": "Vollständige, grammatikalisch korrekte Antwort (2-4 Sätze)",
+  "answer_label": "yes|lean_yes|uncertain|lean_no|no|analytical",
+  "answer_confidence_band": "likely|moderate|close_call|unlikely|analytical",
+  "answer_rationale_short": "Ein Satz Kernbegründung"
+}}"""
+
+    user_message = f"""\
+Frage: {question_text}
+Berechnete Wahrscheinlichkeit: {pct}%
+
+Pro-Signale:
+{_fmt(top_pro_claims)}
+
+Contra-Signale:
+{_fmt(top_contra_claims)}
+
+Unsicherheiten:
+{_fmt(top_uncertainties)}
+
+Antworte als JSON."""
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                max_output_tokens=512,
+            ),
+        )
+        data = json.loads(response.text or "{}")
+
+        # Pflichtfelder prüfen
+        if not data.get("direct_answer") or not data.get("answer_label"):
+            return {}
+
+        return {
+            "direct_answer": str(data["direct_answer"]).strip(),
+            "answer_label": str(data.get("answer_label", "uncertain")),
+            "answer_confidence_band": str(data.get("answer_confidence_band", "close_call")),
+            "answer_rationale_short": str(data.get("answer_rationale_short", "")).strip(),
+            "question_type": str(data.get("question_type", "unknown")),
+        }
+
+    except Exception as exc:
+        log.error("generate_direct_answer fehlgeschlagen: %s", exc, exc_info=True)
+        return {}
+
+
 def generate_forecast_explanation(
     question_text: str,
     probability: float,
