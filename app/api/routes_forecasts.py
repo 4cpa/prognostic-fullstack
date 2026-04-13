@@ -5,11 +5,10 @@ from typing import Any, Optional
 import hashlib
 import json
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.core.forecast_engine import generate_forecast
-from app.core.llm_service import set_request_api_key
 from app.core.db import get_session
 from app.core.logger import get_logger
 from app.models import Forecast, Question
@@ -180,12 +179,8 @@ def create_forecast(
     method_version: str = Query(default="v0.1.0"),
     language: str = Query(default="de"),
     session: Session = Depends(get_session),
-    x_anthropic_key: str = Header(default=""),
 ) -> dict[str, Any]:
-    has_key = bool(x_anthropic_key)
-    if has_key:
-        set_request_api_key(x_anthropic_key)
-    log.info("create_forecast question_id=%s language=%s llm=%s", question_id, language, has_key)
+    log.info("create_forecast question_id=%s language=%s", question_id, language)
     question = _get_question_or_404(session, question_id)
 
     try:
@@ -286,10 +281,7 @@ def recompute_latest_forecast(
     method_version: str = Query(default="v0.1.0"),
     language: str = Query(default="de"),
     session: Session = Depends(get_session),
-    x_anthropic_key: str = Header(default=""),
 ) -> dict[str, Any]:
-    if x_anthropic_key:
-        set_request_api_key(x_anthropic_key)
     question = _get_question_or_404(session, question_id)
 
     engine_payload = generate_forecast(question=question, session=session, language=language)

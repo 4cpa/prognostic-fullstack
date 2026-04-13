@@ -2,8 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { getStoredApiKey } from "./ApiKeyBanner";
-import ApiKeyGuide from "./ApiKeyGuide";
 
 type QuestionCreateResponse = {
   id: string;
@@ -16,7 +14,6 @@ type ForecastCreateResponse = {
 };
 
 type AppError =
-  | { kind: "no_key" }
   | { kind: "http"; status: number; detail: string }
   | { kind: "network"; msg: string };
 
@@ -52,18 +49,7 @@ export default function HomeForm() {
     if (!q) return;
 
     setError(null);
-
-    // Kein API-Key → Guided Setup anzeigen
-    const apiKey = getStoredApiKey();
-    if (!apiKey) {
-      logError("submit without API key", { question: q });
-      setError({ kind: "no_key" });
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
-    const authHeaders: Record<string, string> = { "X-Anthropic-Key": apiKey };
 
     // 1. Frage anlegen
     let questionId: string;
@@ -71,7 +57,7 @@ export default function HomeForm() {
     try {
       const res = await fetch("/api/questions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           title: q.length > 200 ? q.slice(0, 200) : q,
           description: q,
@@ -111,7 +97,7 @@ export default function HomeForm() {
     try {
       const res = await fetch(
         `/api/questions/${questionId}/forecast?method_version=v0.1.0&language=${language}`,
-        { method: "POST", headers: { Accept: "application/json", ...authHeaders } },
+        { method: "POST", headers: { Accept: "application/json" } },
       );
 
       const data = (await res.json()) as ForecastCreateResponse & { detail?: string };
@@ -119,7 +105,6 @@ export default function HomeForm() {
       if (!res.ok) {
         const detail = data.detail ?? `HTTP ${res.status}`;
         logError(`POST /api/questions/${questionId}/forecast → ${res.status}`, detail);
-        // 404 = Frage nicht gefunden → wahrscheinlich ein Datenbankproblem, nicht Key-Problem
         setError({ kind: "http", status: res.status, detail });
         setLoading(false);
         return;
@@ -147,16 +132,8 @@ export default function HomeForm() {
 
   return (
     <div className="w-full space-y-4">
-      {/* Geführte API-Key-Einrichtung */}
-      {error?.kind === "no_key" && (
-        <ApiKeyGuide
-          onSaved={() => { setError(null); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
-
-      {/* HTTP / Netzwerk-Fehler */}
-      {error && error.kind !== "no_key" && (
+      {/* Fehleranzeige */}
+      {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="font-medium">
             {error.kind === "http" && error.status === 404

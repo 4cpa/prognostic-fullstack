@@ -6,6 +6,6 @@ class Settings(BaseModel):
         "DATABASE_URL",
         "postgresql+psycopg2://postgres:postgres@localhost:5432/prognostic",
     )
-    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
 settings = Settings()

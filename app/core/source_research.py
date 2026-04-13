@@ -16,58 +16,140 @@ GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 REQUEST_TIMEOUT = 12
 
 
-WIRE_PUBLISHER_PATTERNS = (
-    "reuters",
-    "associated press",
-    "ap ",
-    "apnews",
-    "afp",
-    "bloomberg",
-)
+# ---------------------------------------------------------------------------
+# Publisher-Klassifizierung
+# ---------------------------------------------------------------------------
 
+WIRE_PUBLISHER_PATTERNS = ("reuters", "associated press", "ap ", "apnews", "afp", "bloomberg")
 MAJOR_MEDIA_PUBLISHER_PATTERNS = (
-    "dw",
-    "dw.com",
-    "bbc",
-    "cnn",
-    "france 24",
-    "al jazeera",
-    "the guardian",
-    "financial times",
-    "wsj",
-    "wall street journal",
-    "new york times",
-    "washington post",
-    "haaretz",
-    "economist",
-    "cnbc",
+    "dw", "dw.com", "bbc", "cnn", "france 24", "al jazeera", "the guardian",
+    "financial times", "wsj", "wall street journal", "new york times",
+    "washington post", "economist", "cnbc", "haaretz",
 )
-
-AGGREGATOR_PUBLISHER_PATTERNS = (
-    "msn",
-    "yahoo",
-    "aol",
-    "newsbreak",
-    "flipboard",
-    "smartnews",
-)
-
+AGGREGATOR_PUBLISHER_PATTERNS = ("msn", "yahoo", "aol", "newsbreak", "flipboard", "smartnews")
 RESEARCH_PUBLISHER_PATTERNS = (
-    "council on foreign relations",
-    "foreign relations",
-    "brookings",
-    "carnegie",
-    "rand",
-    "chatham house",
-    "international crisis group",
-    "csis",
-    "center for strategic and international studies",
-    "bruegel",
-    "ecfr",
-    "cfr",
+    "council on foreign relations", "brookings", "carnegie", "rand", "chatham house",
+    "international crisis group", "csis", "bruegel", "ecfr", "cfr",
 )
 
-OFFICIAL_SOURCES = (
+# ---------------------------------------------------------------------------
+# Themen-Erkennung
+# ---------------------------------------------------------------------------
+
+_KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
+    ("world_war", ("weltkrieg", "world war", "dritter weltkrieg", "third world war")),
+    ("war", ("krieg", " war ", "conflict", "military", "troops", "invasion", "nato", "ukraine", "gaza", "israel")),
+    ("economics", (
+        "stock", "aktie", "price", "preis", "market", "börse", "crypto", "bitcoin",
+        "inflation", "recession", "gdp", "interest rate", "zinsen", "economy",
+        "wirtschaft", "dax", "nasdaq", "s&p", "dollar", "euro", "currency",
+    )),
+    ("politics", (
+        "election", "wahl", "president", "präsident", "chancellor", "kanzler",
+        "parliament", "congress", "senate", "minister", "government", "regierung",
+        "referendum", "abstimmung", "vote", "partei", "party",
+    )),
+    ("technology", (
+        "ai", "artificial intelligence", "software", "app", "tech", "startup",
+        "apple", "google", "microsoft", "meta", "openai", "chip", "semiconductor",
+        "smartphone", "electric vehicle", "ev", "tesla",
+    )),
+    ("health", (
+        "vaccine", "impfstoff", "pandemic", "pandemie", "virus", "disease",
+        "krankheit", "cancer", "drug", "medikament", "fda", "who", "health",
+        "gesundheit", "clinical trial", "studie",
+    )),
+    ("sports", (
+        "cup", "championship", "meisterschaft", "league", "tournament",
+        "fifa", "uefa", "olympic", "olympia", "nfl", "nba", "bundesliga",
+        "football", "soccer", "tennis", "formula 1", "f1",
+    )),
+    ("climate", (
+        "climate", "klima", "temperature", "emission", "co2", "fossil", "renewable",
+        "solar", "wind energy", "glacier", "sea level", "carbon",
+    )),
+]
+
+
+def _question_kind(question_text: str) -> str:
+    q = re.sub(r"\s+", " ", (question_text or "").strip()).lower()
+    for kind, patterns in _KIND_PATTERNS:
+        if any(p in q for p in patterns):
+            return kind
+    return "general"
+
+
+def _is_geopolitical(kind: str) -> bool:
+    return kind in {"world_war", "war"}
+
+
+# ---------------------------------------------------------------------------
+# Stance-Signale pro Thema
+# ---------------------------------------------------------------------------
+
+# Generische Signale: (positive_terms, negative_terms)
+_GENERIC_PRO_TERMS = (
+    "confirms", "confirmed", "achieves", "achieved", "reaches", "reached",
+    "launches", "launched", "announces", "announced", "advances", "approved",
+    "succeeds", "wins", "gains", "rises", "surges", "grows", "expands",
+    "breaks record", "new high", "record high", "record",
+)
+_GENERIC_CONTRA_TERMS = (
+    "fails", "failed", "cancels", "cancelled", "delays", "delayed",
+    "rejects", "rejected", "misses", "missed", "crashes", "loses", "lost",
+    "falls", "drops", "declines", "collapses", "bankruptcy", "bankrupt",
+    "blocks", "blocked", "postponed", "retreat", "disappoints",
+)
+
+_STANCE_SIGNALS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...]]] = {
+    "economics": (
+        ("rise", "surge", "rally", "gain", "growth", "profit", "record", "outperform", "bull", "up"),
+        ("fall", "crash", "decline", "loss", "recession", "deficit", "bear", "down", "miss", "default"),
+    ),
+    "politics": (
+        ("wins", "elected", "passes", "approved", "majority", "victory", "advances", "signs"),
+        ("loses", "defeated", "fails", "rejected", "blocked", "vetoed", "scandal", "resigns"),
+    ),
+    "technology": (
+        ("launches", "releases", "breakthrough", "approved", "acquired", "partnership", "record"),
+        ("fails", "delays", "banned", "fined", "recall", "layoffs", "cancelled", "drops"),
+    ),
+    "health": (
+        ("approved", "effective", "successful", "breakthrough", "cures", "reduces", "prevents"),
+        ("fails", "rejected", "side effects", "withdrawn", "ineffective", "outbreak", "spread"),
+    ),
+    "sports": (
+        ("wins", "advances", "champions", "scores", "victory", "gold", "qualifies", "beats"),
+        ("loses", "eliminated", "defeated", "injured", "suspended", "disqualified"),
+    ),
+    "climate": (
+        ("reduces", "below", "targets", "renewable", "agreement", "milestone", "record low"),
+        ("exceeds", "record high", "fails", "retreat", "melts", "rises", "floods", "drought"),
+    ),
+    "world_war": (
+        ("world war", "weltkrieg", "global war", "article 5", "major power", "direct conflict"),
+        ("ceasefire", "de-escalation", "diplomacy", "negotiations", "peace", "containment"),
+    ),
+    "war": (
+        ("offensive", "invasion", "attack", "airstrikes", "casualties", "escalation"),
+        ("ceasefire", "peace talks", "withdrawal", "agreement", "truce", "mediation"),
+    ),
+}
+
+MIN_RELEVANCE_BY_KIND: Dict[str, float] = {
+    "world_war": 0.14,
+    "war": 0.10,
+    "economics": 0.06,
+    "politics": 0.06,
+    "technology": 0.06,
+    "health": 0.06,
+    "sports": 0.06,
+    "climate": 0.06,
+    "general": 0.05,
+}
+
+# Offizielle Quellen nur für geopolitische Fragen
+GEOPOLITICAL_OFFICIAL_SOURCES = (
     {
         "title": "NATO news",
         "url": "https://www.nato.int/cps/en/natohq/news.htm",
@@ -91,119 +173,6 @@ OFFICIAL_SOURCES = (
     },
 )
 
-WORLD_WAR_DIRECT_PRO_TERMS = (
-    "world war",
-    "weltkrieg",
-    "global war",
-    "great power war",
-    "major power war",
-    "article 5",
-    "nato article 5",
-    "direct us-russia conflict",
-    "direct u.s.-russia conflict",
-    "direct us-china conflict",
-    "direct u.s.-china conflict",
-    "multiple major powers at war",
-    "major powers at war",
-    "global military conflict",
-    "broader war involving major powers",
-)
-
-WORLD_WAR_DIRECT_CONTRA_TERMS = (
-    "ceasefire",
-    "ceasefire talks",
-    "de-escalation",
-    "containment",
-    "restraint",
-    "avoid wider war",
-    "no broader war",
-    "conflict remains regional",
-    "diplomatic channel",
-    "backchannel",
-    "negotiation",
-    "negotiations",
-    "talks with iran",
-    "held talks with iran",
-    "peace talks",
-    "mediation",
-    "mediated talks",
-    "indirect talks",
-    "resume talks",
-    "reopen talks",
-)
-
-WORLD_WAR_REGIONAL_ESCALATION_TERMS = (
-    "regional escalation",
-    "regional war",
-    "broader regional war",
-    "widening conflict",
-    "new front",
-    "open new front",
-    "ground assault",
-    "airstrike",
-    "airstrikes",
-    "missile",
-    "missiles",
-    "hormuz",
-    "strait of hormuz",
-    "red sea",
-    "shipping route",
-    "shipping disruption",
-    "warship escorts",
-    "troop buildup",
-    "troop deployment",
-    "houthi",
-    "houthis",
-    "nuclear site",
-    "retaliation",
-    "more strikes",
-    "additional strikes",
-    "fresh strikes",
-)
-
-WORLD_WAR_IRRELEVANT_CONTEXT_TERMS = (
-    "lng",
-    "coal-fired power",
-    "coal fired power",
-    "energy prices",
-    "stock market",
-    "earnings",
-    "sports",
-    "celebrity",
-)
-
-DIPLOMACY_DEDUP_TERMS = (
-    "ceasefire",
-    "ceasefire talks",
-    "held talks with iran",
-    "talks with iran",
-    "diplomatic channel",
-    "indirect talks",
-    "reopen talks",
-    "resume talks",
-    "mediation",
-    "de-escalation",
-    "avoid wider war",
-)
-
-REGIONAL_ESCALATION_DEDUP_TERMS = (
-    "hormuz",
-    "red sea",
-    "warship escorts",
-    "ground assault",
-    "new front",
-    "missiles",
-    "airstrikes",
-    "houthi",
-    "houthis",
-)
-
-MIN_RELEVANCE_BY_QUESTION_KIND = {
-    "world_war": 0.14,
-    "war": 0.12,
-    "general": 0.08,
-}
-
 
 @dataclass
 class ResearchSource:
@@ -225,6 +194,10 @@ class ResearchSource:
     retrieval_method: str
     credibility_score: float
 
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktionen
+# ---------------------------------------------------------------------------
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -249,16 +222,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _question_kind(question_text: str) -> str:
-    q = _lower(question_text)
-
-    if "weltkrieg" in q or "world war" in q:
-        return "world_war"
-    if "krieg" in q or "war" in q or "conflict" in q:
-        return "war"
-    return "general"
-
-
 def _question_tokens(question_text: str) -> List[str]:
     return re.findall(r"[a-zA-Z0-9äöüß\-]{3,}", _lower(question_text))
 
@@ -267,11 +230,9 @@ def _keyword_overlap(question_text: str, text: str) -> float:
     q_tokens = set(_question_tokens(question_text))
     if not q_tokens:
         return 0.25
-
     t_tokens = set(re.findall(r"[a-zA-Z0-9äöüß\-]{3,}", _lower(text)))
     if not t_tokens:
         return 0.0
-
     overlap = len(q_tokens.intersection(t_tokens))
     denom = max(4, min(len(q_tokens), 16))
     return _clamp(overlap / denom)
@@ -290,9 +251,7 @@ def _parse_google_news_title(raw_title: str) -> Tuple[str, str]:
 
 
 def _publisher_from_domain(domain: str) -> str:
-    d = _lower(domain)
-    d = d.replace("www.", "")
-    return d
+    return _lower(domain).replace("www.", "")
 
 
 def _extract_domain(url: str) -> str:
@@ -305,14 +264,13 @@ def _extract_domain(url: str) -> str:
 
 def _publisher_type(publisher: str, domain: str) -> str:
     publisher_text = _lower(f"{publisher} {domain}")
-
-    if any(pattern in publisher_text for pattern in AGGREGATOR_PUBLISHER_PATTERNS):
+    if any(p in publisher_text for p in AGGREGATOR_PUBLISHER_PATTERNS):
         return "aggregator"
-    if any(pattern in publisher_text for pattern in RESEARCH_PUBLISHER_PATTERNS):
+    if any(p in publisher_text for p in RESEARCH_PUBLISHER_PATTERNS):
         return "research"
-    if any(pattern in publisher_text for pattern in WIRE_PUBLISHER_PATTERNS):
+    if any(p in publisher_text for p in WIRE_PUBLISHER_PATTERNS):
         return "wire"
-    if any(pattern in publisher_text for pattern in MAJOR_MEDIA_PUBLISHER_PATTERNS):
+    if any(p in publisher_text for p in MAJOR_MEDIA_PUBLISHER_PATTERNS):
         return "major_media"
     if domain.endswith(".gov") or domain.endswith(".int"):
         return "official"
@@ -340,76 +298,91 @@ def _freshness_score(published_at: Optional[str]) -> float:
     dt = _parse_published_at(published_at)
     if not dt:
         return 0.45
-
     age_days = max(0.0, (_utcnow() - dt).total_seconds() / 86400.0)
     score = math.exp(-age_days / 28.0)
     return round(_clamp(score, 0.2, 1.0), 4)
 
 
+# ---------------------------------------------------------------------------
+# Relevanz, Stance, Signal — themenunabhängig
+# ---------------------------------------------------------------------------
+
 def _question_specific_relevance(question_text: str, title: str, summary: str) -> float:
-    q_kind = _question_kind(question_text)
+    kind = _question_kind(question_text)
     text = _lower(f"{title}. {summary}")
     overlap = _keyword_overlap(question_text, text)
 
-    if _contains_any(text, WORLD_WAR_IRRELEVANT_CONTEXT_TERMS):
-        return 0.0
-
-    if q_kind == "world_war":
-        if _contains_any(text, WORLD_WAR_DIRECT_PRO_TERMS):
+    # Geopolitisch: spezialisierte Logik
+    if kind == "world_war":
+        pro_terms, contra_terms = _STANCE_SIGNALS["world_war"]
+        if _contains_any(text, pro_terms):
             return 0.85
-        if _contains_any(text, WORLD_WAR_DIRECT_CONTRA_TERMS):
+        if _contains_any(text, contra_terms):
             return 0.70
-        if _contains_any(text, WORLD_WAR_REGIONAL_ESCALATION_TERMS):
-            return 0.18
-        if "iran" in text or "israel" in text or "u.s." in text or "us " in text:
+        if any(w in text for w in ("iran", "israel", "u.s.", "russia", "china", "nato")):
             return max(0.10, overlap * 0.45)
         return overlap * 0.25
 
-    if q_kind == "war":
-        return max(overlap * 0.75, 0.08 if "war" in text or "conflict" in text else 0.0)
+    if kind == "war":
+        return max(overlap * 0.75, 0.10 if _contains_any(text, ("war", "conflict", "military")) else 0.0)
+
+    # Alle anderen Themen: Keyword-Overlap, leicht geboosted wenn Signalbegriffe passen
+    if kind in _STANCE_SIGNALS:
+        pro_terms, contra_terms = _STANCE_SIGNALS[kind]
+        if _contains_any(text, pro_terms) or _contains_any(text, contra_terms):
+            return _clamp(overlap + 0.15)
 
     return overlap
 
 
 def _classify_stance(question_text: str, title: str, summary: str) -> str:
-    q_kind = _question_kind(question_text)
+    kind = _question_kind(question_text)
     text = _lower(f"{title}. {summary}")
 
-    if q_kind == "world_war":
-        if _contains_any(text, WORLD_WAR_DIRECT_PRO_TERMS):
+    if kind in _STANCE_SIGNALS:
+        pro_terms, contra_terms = _STANCE_SIGNALS[kind]
+        has_pro = _contains_any(text, pro_terms)
+        has_contra = _contains_any(text, contra_terms)
+        if has_pro and not has_contra:
             return "pro"
-        if _contains_any(text, WORLD_WAR_DIRECT_CONTRA_TERMS):
+        if has_contra and not has_pro:
             return "contra"
-        return "uncertainty"
 
-    if _contains_any(text, ("ceasefire", "de-escalation", "agreement", "stability")):
-        return "contra"
-    if _contains_any(text, ("war", "attack", "invasion", "escalation")):
+    # Generische Fallback-Signale
+    if _contains_any(text, _GENERIC_PRO_TERMS):
         return "pro"
+    if _contains_any(text, _GENERIC_CONTRA_TERMS):
+        return "contra"
+
     return "uncertainty"
 
 
 def _signal_strength(question_text: str, title: str, summary: str, source_type: str) -> float:
+    kind = _question_kind(question_text)
     text = _lower(f"{title}. {summary}")
-    q_kind = _question_kind(question_text)
 
-    if q_kind == "world_war":
-        if _contains_any(text, WORLD_WAR_DIRECT_PRO_TERMS):
-            return 0.78
-        if _contains_any(text, WORLD_WAR_DIRECT_CONTRA_TERMS):
-            return 0.62
-        if _contains_any(text, WORLD_WAR_REGIONAL_ESCALATION_TERMS):
-            return 0.26
-        return 0.16
+    if kind in _STANCE_SIGNALS:
+        pro_terms, contra_terms = _STANCE_SIGNALS[kind]
+        if kind == "world_war":
+            if _contains_any(text, pro_terms):
+                return 0.78
+            if _contains_any(text, contra_terms):
+                return 0.62
+            return 0.16
+        has_signal = _contains_any(text, pro_terms) or _contains_any(text, contra_terms)
+        if has_signal:
+            base = {"wire": 0.55, "research": 0.50, "major_media": 0.45, "official": 0.52}.get(source_type, 0.38)
+            return round(_clamp(base), 4)
 
+    # Quellentyp-Basis
     base = {
-        "official": 0.18,
-        "wire": 0.20,
-        "research": 0.18,
-        "major_media": 0.16,
-        "other": 0.12,
+        "official": 0.28,
+        "wire": 0.30,
+        "research": 0.28,
+        "major_media": 0.24,
+        "other": 0.18,
         "aggregator": 0.05,
-    }.get(source_type, 0.10)
+    }.get(source_type, 0.15)
     return round(_clamp(base), 4)
 
 
@@ -424,10 +397,6 @@ def _credibility_score(source_type: str, publisher: str, domain: str) -> float:
         return 0.84
     if source_type == "aggregator":
         return 0.35
-
-    publisher_text = _lower(f"{publisher} {domain}")
-    if "cfr" in publisher_text or "council on foreign relations" in publisher_text:
-        return 0.82
     return 0.60
 
 
@@ -458,6 +427,54 @@ def _overall_score(
     return round(_clamp(score), 4)
 
 
+# ---------------------------------------------------------------------------
+# Query-Plan: LLM-basiert mit Fallback
+# ---------------------------------------------------------------------------
+
+def _query_plan_fallback(question_text: str) -> List[str]:
+    """Regelbasierter Fallback falls kein LLM verfügbar."""
+    kind = _question_kind(question_text)
+    q = _normalize_text(question_text)
+
+    if kind == "world_war":
+        return [
+            "world war risk 2026 Reuters AP AFP official",
+            "diplomatic efforts avoid wider war Reuters",
+            "NATO UN major power conflict warning",
+            "global war escalation risk Reuters AP",
+        ]
+    if kind == "war":
+        return [q, f"{q} Reuters", f"{q} ceasefire diplomacy"]
+    if kind == "economics":
+        return [q, f"{q} Reuters", f"{q} analyst forecast"]
+    if kind == "politics":
+        return [q, f"{q} election results", f"{q} Reuters"]
+    if kind == "technology":
+        return [q, f"{q} announcement", f"{q} Reuters"]
+    if kind == "health":
+        return [q, f"{q} study results", f"{q} WHO FDA"]
+    if kind == "sports":
+        return [q, f"{q} match results", f"{q} championship"]
+
+    return [q, f"{q} Reuters"]
+
+
+def _query_plan(question_text: str) -> List[str]:
+    """Generiert Suchanfragen via Gemini, Fallback auf Regellogik."""
+    try:
+        from app.core.llm_service import generate_search_queries
+        queries = generate_search_queries(question_text)
+        if queries:
+            return queries
+    except Exception:
+        pass
+    return _query_plan_fallback(question_text)
+
+
+# ---------------------------------------------------------------------------
+# Google News Fetch
+# ---------------------------------------------------------------------------
+
 def _fetch_url(url: str) -> bytes:
     req = urllib.request.Request(
         url,
@@ -471,12 +488,7 @@ def _fetch_url(url: str) -> bytes:
 
 
 def _google_news_search(query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
-    params = {
-        "q": query,
-        "hl": "en-US",
-        "gl": "US",
-        "ceid": "US:en",
-    }
+    params = {"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"}
     url = f"{GOOGLE_NEWS_RSS}?{urllib.parse.urlencode(params)}"
 
     try:
@@ -495,55 +507,37 @@ def _google_news_search(query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
         title, publisher = _parse_google_news_title(raw_title)
         domain = _extract_domain(link)
 
-        items.append(
-            {
-                "title": title,
-                "publisher": publisher or _publisher_from_domain(domain),
-                "url": link,
-                "domain": domain,
-                "summary": _normalize_text(description or title),
-                "excerpt": "",
-                "published_at": _published_at_iso(pub_date),
-                "retrieval_method": "google_news_rss",
-                "query": query,
-            }
-        )
+        items.append({
+            "title": title,
+            "publisher": publisher or _publisher_from_domain(domain),
+            "url": link,
+            "domain": domain,
+            "summary": _normalize_text(description or title),
+            "excerpt": "",
+            "published_at": _published_at_iso(pub_date),
+            "retrieval_method": "google_news_rss",
+            "query": query,
+        })
 
     return items
 
 
-def _query_plan(question_text: str) -> List[str]:
-    q_kind = _question_kind(question_text)
-    q = _normalize_text(question_text)
-
-    if q_kind == "world_war":
-        return [
-            "world war risk 2026 Reuters AP AFP official",
-            "diplomatic efforts avoid wider war Iran Reuters",
-            "NATO UN major power conflict warning Reuters",
-            "Iran talks containment wider war Reuters",
-            "global war escalation risk 2026 Reuters AP",
-        ]
-
-    if q_kind == "war":
-        return [
-            q,
-            f"{q} Reuters",
-            f"{q} official statements",
-        ]
-
-    return [q, f"{q} Reuters"]
-
+# ---------------------------------------------------------------------------
+# Kandidaten normalisieren & deduplizieren
+# ---------------------------------------------------------------------------
 
 def _source_from_official_catalog(question_text: str) -> List[ResearchSource]:
-    q_kind = _question_kind(question_text)
-    results: List[ResearchSource] = []
+    """Offizielle Quellen nur für geopolitische Fragen einbinden."""
+    kind = _question_kind(question_text)
+    if not _is_geopolitical(kind):
+        return []
 
-    for item in OFFICIAL_SOURCES:
-        relevance = 0.08 if q_kind == "world_war" else 0.10
+    results: List[ResearchSource] = []
+    for item in GEOPOLITICAL_OFFICIAL_SOURCES:
+        relevance = 0.08 if kind == "world_war" else 0.10
         freshness = 0.45
         credibility = 0.98
-        signal = 0.10 if q_kind == "world_war" else 0.14
+        signal = 0.10
         overall = _overall_score(
             source_type="official",
             relevance=relevance,
@@ -551,28 +545,25 @@ def _source_from_official_catalog(question_text: str) -> List[ResearchSource]:
             credibility=credibility,
             signal_strength=signal,
         )
-        results.append(
-            ResearchSource(
-                url=item["url"],
-                query="official_catalog",
-                title=item["title"],
-                domain=_extract_domain(item["url"]),
-                stance="neutral",
-                weight=overall,
-                excerpt="",
-                summary=item["summary"],
-                publisher=item["publisher"],
-                source_type="official",
-                published_at=None,
-                overall_score=overall,
-                freshness_score=freshness,
-                relevance_score=relevance,
-                signal_strength=signal,
-                retrieval_method="official_catalog",
-                credibility_score=credibility,
-            )
-        )
-
+        results.append(ResearchSource(
+            url=item["url"],
+            query="official_catalog",
+            title=item["title"],
+            domain=_extract_domain(item["url"]),
+            stance="neutral",
+            weight=overall,
+            excerpt="",
+            summary=item["summary"],
+            publisher=item["publisher"],
+            source_type="official",
+            published_at=None,
+            overall_score=overall,
+            freshness_score=freshness,
+            relevance_score=relevance,
+            signal_strength=signal,
+            retrieval_method="official_catalog",
+            credibility_score=credibility,
+        ))
     return results
 
 
@@ -591,8 +582,8 @@ def _normalize_candidate(question_text: str, item: Dict[str, Any]) -> Optional[R
         return None
 
     relevance = _question_specific_relevance(question_text, title, summary)
-    q_kind = _question_kind(question_text)
-    min_rel = MIN_RELEVANCE_BY_QUESTION_KIND.get(q_kind, 0.08)
+    kind = _question_kind(question_text)
+    min_rel = MIN_RELEVANCE_BY_KIND.get(kind, 0.05)
 
     if relevance < min_rel:
         return None
@@ -630,22 +621,6 @@ def _normalize_candidate(question_text: str, item: Dict[str, Any]) -> Optional[R
     )
 
 
-def _dedupe_bucket_key(question_text: str, source: ResearchSource) -> str:
-    text = _lower(f"{source.title}. {source.summary}")
-    q_kind = _question_kind(question_text)
-
-    if q_kind == "world_war":
-        if _contains_any(text, DIPLOMACY_DEDUP_TERMS):
-            return "world_war:diplomacy"
-        if _contains_any(text, REGIONAL_ESCALATION_DEDUP_TERMS):
-            return "world_war:regional_escalation"
-        if _contains_any(text, WORLD_WAR_DIRECT_PRO_TERMS):
-            return "world_war:major_power_signal"
-        if source.source_type == "research":
-            return "world_war:research"
-    return ""
-
-
 def _normalized_title_fingerprint(title: str) -> str:
     base = _lower(title)
     base = re.sub(r"[^a-z0-9äöüß\s]", " ", base)
@@ -654,10 +629,9 @@ def _normalized_title_fingerprint(title: str) -> str:
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
-def _dedupe_sources(question_text: str, sources: List[ResearchSource]) -> List[ResearchSource]:
+def _dedupe_sources(sources: List[ResearchSource]) -> List[ResearchSource]:
     kept: List[ResearchSource] = []
     seen_title_fp: set[str] = set()
-    bucket_counts: Dict[str, int] = {}
 
     for source in sorted(
         sources,
@@ -667,14 +641,6 @@ def _dedupe_sources(question_text: str, sources: List[ResearchSource]) -> List[R
         title_fp = _normalized_title_fingerprint(source.title)
         if title_fp in seen_title_fp:
             continue
-
-        bucket = _dedupe_bucket_key(question_text, source)
-        if bucket:
-            limit = 1 if bucket in {"world_war:diplomacy", "world_war:research"} else 2
-            if bucket_counts.get(bucket, 0) >= limit:
-                continue
-            bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
-
         seen_title_fp.add(title_fp)
         kept.append(source)
 
@@ -691,8 +657,12 @@ def _fetch_candidates(question_text: str) -> List[ResearchSource]:
                 normalized.append(source)
 
     normalized.extend(_source_from_official_catalog(question_text))
-    return _dedupe_sources(question_text, normalized)
+    return _dedupe_sources(normalized)
 
+
+# ---------------------------------------------------------------------------
+# Öffentliche API
+# ---------------------------------------------------------------------------
 
 def research_sources(
     question_text: str,

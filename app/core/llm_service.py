@@ -1,5 +1,5 @@
 """
-Claude-API-Integration für Claim-Extraktion und Forecast-Erklärung.
+Gemini-API-Integration für Claim-Extraktion und Forecast-Erklärung.
 
 Beide Funktionen fallen auf die regelbasierte Pipeline zurück,
 wenn kein API-Key gesetzt ist oder ein Fehler auftritt.
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-from contextvars import ContextVar
 from typing import Any, Dict, List
 
 from app.core.logger import get_logger
@@ -16,20 +15,12 @@ from app.core.logger import get_logger
 log = get_logger("llm_service")
 
 try:
-    import anthropic as _anthropic_module
-    _ANTHROPIC_AVAILABLE = True
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
 except ImportError:
-    _ANTHROPIC_AVAILABLE = False
+    _GENAI_AVAILABLE = False
 
-MODEL = "claude-opus-4-6"
-
-# Request-scoped API-Key (wird pro Request gesetzt, überschreibt Umgebungsvariable)
-_request_api_key: ContextVar[str] = ContextVar("request_api_key", default="")
-
-
-def set_request_api_key(key: str) -> None:
-    """Setzt den API-Key für den aktuellen Request-Kontext."""
-    _request_api_key.set(key.strip())
+MODEL = "gemini-2.0-flash"
 
 _CLAIM_EXTRACTION_SYSTEM = """\
 You are a forecasting analyst. Extract claims from the given source that are relevant to the forecasting question.
@@ -59,14 +50,56 @@ _LANG_INSTRUCTIONS: dict[str, str] = {
 }
 
 
-def _get_client() -> "anthropic.Anthropic | None":
-    if not _ANTHROPIC_AVAILABLE:
+def _get_api_key() -> str:
+    return os.getenv("GEMINI_API_KEY", "").strip()
+
+
+def _get_model(system_instruction: str) -> "genai.GenerativeModel | None":
+    if not _GENAI_AVAILABLE:
+        log.warning("google-generativeai not installed")
         return None
-    # Request-scoped Key hat Vorrang vor Umgebungsvariable
-    api_key = _request_api_key.get("") or os.getenv("ANTHROPIC_API_KEY", "")
+    api_key = _get_api_key()
     if not api_key:
+        log.warning("GEMINI_API_KEY not set — LLM disabled")
         return None
-    return _anthropic_module.Anthropic(api_key=api_key)
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(
+        model_name=MODEL,
+        system_instruction=system_instruction,
+    )
+
+
+def generate_search_queries(question_text: str) -> List[str]:
+    """
+    Generiert 4 gezielte Google-News-Suchanfragen für eine beliebige Prognosefrage.
+    Gibt leere Liste zurück wenn kein API-Key oder Fehler.
+    """
+    system = (
+        "You are a research assistant helping gather evidence for a forecasting question. "
+        "Generate exactly 4 short Google News search queries (2–5 words each) that cover "
+        "different angles: the core event, opposing signals, expert/official statements, and recent developments. "
+        'Return ONLY valid JSON: {"queries": ["q1", "q2", "q3", "q4"]}'
+    )
+    model = _get_model(system)
+    if model is None:
+        return []
+
+    user_message = f'Forecasting question: "{question_text}"\n\nGenerate 4 search queries.'
+
+    try:
+        response = model.generate_content(
+            user_message,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=256,
+            ),
+        )
+        data = json.loads(response.text or "{}")
+        queries = data.get("queries", [])
+        return [str(q).strip() for q in queries if str(q).strip()][:5]
+    except Exception as exc:
+        log.error("generate_search_queries failed: %s", exc)
+        return []
 
 
 def extract_claims_with_llm(
@@ -74,13 +107,13 @@ def extract_claims_with_llm(
     source: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     """
-    Extrahiert Claims aus einer Quelle mit Claude.
+    Extrahiert Claims aus einer Quelle mit Gemini.
 
     Gibt eine leere Liste zurück wenn kein API-Key verfügbar
     oder ein Fehler auftritt (Fallback auf regelbasierte Logik).
     """
-    client = _get_client()
-    if client is None:
+    model = _get_model(_CLAIM_EXTRACTION_SYSTEM)
+    if model is None:
         return []
 
     title = (source.get("title") or "").strip()
@@ -99,48 +132,15 @@ def extract_claims_with_llm(
     )
 
     try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": _CLAIM_EXTRACTION_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_message}],
-            output_config={
-                "format": {
-                    "type": "json_schema",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "claims": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "claim_text": {"type": "string"},
-                                        "claim_type": {
-                                            "type": "string",
-                                            "enum": ["pro", "contra", "uncertainty", "background"],
-                                        },
-                                        "claim_confidence": {"type": "number"},
-                                    },
-                                    "required": ["claim_text", "claim_type", "claim_confidence"],
-                                    "additionalProperties": False,
-                                },
-                            }
-                        },
-                        "required": ["claims"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
+        response = model.generate_content(
+            user_message,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=1024,
+            ),
         )
 
-        text = next((b.text for b in response.content if b.type == "text"), "{}")
+        text = response.text or "{}"
         data = json.loads(text)
 
         freshness = float(source.get("freshness_score") or 0.45)
@@ -178,17 +178,17 @@ def generate_forecast_explanation(
     language: str = "de",
 ) -> str:
     """
-    Generiert eine natürlichsprachliche Forecast-Erklärung mit Claude.
+    Generiert eine natürlichsprachliche Forecast-Erklärung mit Gemini.
 
     Gibt einen leeren String zurück bei fehlendem API-Key oder Fehler
     (Fallback auf Template-basierte Erklärung in forecast_engine.py).
     """
-    client = _get_client()
-    if client is None:
-        return ""
-
     lang_instruction = _LANG_INSTRUCTIONS.get(language.lower(), _LANG_INSTRUCTIONS["de"])
     explanation_system = _EXPLANATION_SYSTEM_TEMPLATE.format(lang_instruction=lang_instruction)
+
+    model = _get_model(explanation_system)
+    if model is None:
+        return ""
 
     pct = round(probability * 100.0, 1)
 
@@ -215,20 +215,14 @@ def generate_forecast_explanation(
 
     try:
         parts: List[str] = []
-        with client.messages.stream(
-            model=MODEL,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": explanation_system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_message}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                parts.append(chunk)
+        response = model.generate_content(
+            user_message,
+            generation_config=genai.GenerationConfig(max_output_tokens=1024),
+            stream=True,
+        )
+        for chunk in response:
+            if chunk.text:
+                parts.append(chunk.text)
         return "".join(parts).strip()
 
     except Exception as exc:

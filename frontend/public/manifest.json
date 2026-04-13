@@ -1,0 +1,38 @@
+{
+  "name": "4CPA Prognostic Engine",
+  "short_name": "4CPA Prognostic",
+  "description": "Stelle eine Frage – erhalte einen KI-gestützten Forecast. See tomorrow, today.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "lang": "de",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/social-preview.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "label": "4CPA Prognostic Engine"
+    }
+  ]
+}

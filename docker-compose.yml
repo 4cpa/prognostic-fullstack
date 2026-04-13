@@ -24,6 +24,7 @@ services:
       - postgres
     environment:
       DATABASE_URL: postgresql://prognostic:${POSTGRES_PASSWORD}@postgres:5432/prognosticdb
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "127.0.0.1:8000:8000"
     mem_limit: 512m
