@@ -296,7 +296,13 @@ export default async function ForecastDetailPage({ params }: PageProps) {
   const answerRationale = full.answer_rationale_short ?? forecast.answer_rationale_short ?? null;
   const questionType  = full.question_type ?? null;
   const scenarios     = (full.scenarios ?? []).filter((s) => s.title);
-  const isOpenQuestion = questionType === "open" || answerLabel === "analytical";
+
+  // Detect open question: from stored type, answer label, or question text as fallback
+  const OPEN_PREFIXES = /^(was|wer|wann|wo|wie|warum|welche|welcher|welches|wieviel|wie\s+viel|womit|wozu|wohin|wofür|worüber|inwiefern|inwieweit)\b/i;
+  const isOpenQuestion =
+    questionType === "open" ||
+    answerLabel === "analytical" ||
+    OPEN_PREFIXES.test(questionText.trim());
 
   const probability = full.calibrated_probability ?? full.raw_probability ?? forecast.probability;
   const pctNum = toPercentNum(probability);
@@ -321,7 +327,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
         {/* ── Frage ── */}
-        <h1 className="mb-6 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl">
+        <h1 className="mb-6 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl break-words">
           {questionText}
         </h1>
 
@@ -330,7 +336,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
           <div className="mb-6 space-y-3">
             {/* Einleitungstext */}
             {directAnswer && (
-              <p className="text-base leading-7 text-slate-700">{directAnswer}</p>
+              <p className="text-base leading-7 text-slate-700 break-words">{directAnswer}</p>
             )}
 
             {/* Szenario-Karten */}
@@ -341,10 +347,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                     key={i}
                     className="rounded-2xl border border-blue-200 bg-blue-50 p-5"
                   >
-                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                    <p className="text-sm font-semibold text-blue-900 mb-1 break-words">
                       {s.title}
                     </p>
-                    <p className="text-sm leading-6 text-slate-700">{s.description}</p>
+                    <p className="text-sm leading-6 text-slate-700 break-words">{s.description}</p>
                   </div>
                 ))}
               </div>
@@ -374,7 +380,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                 )}
               </div>
 
-              <p className="text-lg font-semibold leading-7 text-slate-950">
+              <p className="text-lg font-semibold leading-7 text-slate-950 break-words">
                 {directAnswer || "Gemini-Antwort wird berechnet…"}
               </p>
 
@@ -451,7 +457,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {proClaims.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p>{claimText(c)}</p>
+                        <p className="break-words">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
@@ -484,7 +490,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {contraClaims.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p>{claimText(c)}</p>
+                        <p className="break-words">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
@@ -517,7 +523,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                   <ul className="space-y-3">
                     {uncertainties.map((c, i) => (
                       <li key={String(c.id ?? i)} className="text-sm leading-5 text-slate-800">
-                        <p>{claimText(c)}</p>
+                        <p className="break-words">{claimText(c)}</p>
                         {(c.source_url || c.source_title) && (
                           <p className="mt-1 text-xs text-slate-400">
                             {c.source_url ? (
@@ -557,13 +563,13 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                 <li key={String(s.id ?? i)} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold text-slate-900 leading-5">
+                      <h3 className="text-sm font-semibold text-slate-900 leading-5 break-words">
                         {s.url ? (
                           <a
                             href={s.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hover:underline text-slate-900"
+                            className="hover:underline text-slate-900 break-all"
                           >
                             {s.title || s.url}
                             <span className="sr-only"> (öffnet in neuem Tab)</span>
@@ -573,7 +579,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                         )}
                       </h3>
                       {(s.summary || s.excerpt) && (
-                        <p className="mt-1 text-xs leading-5 text-slate-600 line-clamp-3">
+                        <p className="mt-1 text-xs leading-5 text-slate-600 line-clamp-3 break-words">
                           {s.summary || s.excerpt}
                         </p>
                       )}
