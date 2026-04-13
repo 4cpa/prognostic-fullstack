@@ -37,6 +37,12 @@ RESEARCH_PUBLISHER_PATTERNS = (
 # ---------------------------------------------------------------------------
 
 _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
+    ("existence", (
+        " fort?", " fort ", "fortbestand", "fortbestehen", "weiterbestehen", "überleben",
+        "bleibt bestehen", "löst sich auf", "wird aufgelöst",
+        "dissolution", "will it survive", "still exist", "remain operational",
+        "continue to exist", "disbands",
+    )),
     ("world_war", ("weltkrieg", "world war", "dritter weltkrieg", "third world war")),
     ("war", ("krieg", " war ", "conflict", "military", "troops", "invasion", "nato", "ukraine", "gaza", "israel")),
     ("economics", (
@@ -48,6 +54,9 @@ _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
         "election", "wahl", "president", "präsident", "chancellor", "kanzler",
         "parliament", "congress", "senate", "minister", "government", "regierung",
         "referendum", "abstimmung", "vote", "partei", "party",
+        "uno", "united nations", "un ", "eu ", "european union", "europäische union",
+        "trump", "biden", "putin", "xi jinping", "merkel", "scholz", "macron",
+        "sanktion", "sanction", "diplomat", "treaty", "vertrag", "summit", "gipfel",
     )),
     ("technology", (
         "ai", "artificial intelligence", "software", "app", "tech", "startup",
@@ -125,6 +134,17 @@ _STANCE_SIGNALS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...]]] = {
     "climate": (
         ("reduces", "below", "targets", "renewable", "agreement", "milestone", "record low"),
         ("exceeds", "record high", "fails", "retreat", "melts", "rises", "floods", "drought"),
+    ),
+    "existence": (
+        # pro: institution ist aktiv, plant Zukunft, hält Konferenzen ab
+        ("hosts", "convenes", "holds", "scheduled", "plans", "appoints", "elects",
+         "meets", "adopts resolution", "treaty", "conference", "summit", "session",
+         "operational", "active", "continues", "renewed", "reform", "strengthened",
+         "budget approved", "member states", "general assembly", "security council"),
+        # contra: Bedrohungen, Rückzug, Finanzierungskrise, Auflösungstendenzen
+        ("dissolves", "disbanded", "collapse", "exit", "withdraw", "defunds",
+         "funding cut", "leaves", "quits", "withdraws from", "sanctions", "veto blocks",
+         "reform fails", "paralyzed", "ineffective", "obsolete", "abolished"),
     ),
     "world_war": (
         ("world war", "weltkrieg", "global war", "article 5", "major power", "direct conflict"),
@@ -431,10 +451,77 @@ def _overall_score(
 # Query-Plan: LLM-basiert mit Fallback
 # ---------------------------------------------------------------------------
 
+_DE_STOPWORDS = frozenset({
+    "wird", "besteht", "besteht die", "ist", "hat", "kann", "wird es", "gibt es",
+    "wann", "ob", "wird der", "wird die", "wird das", "bis", "noch", "fort",
+    "weiter", "weiterhin", "bis zum", "bis zur", "bis zu", "ab", "bleibt",
+    "der", "die", "das", "ein", "eine", "einem", "einer", "den", "dem",
+    "und", "oder", "aber", "als", "für", "von", "mit", "bei", "im", "in",
+    "an", "auf", "über", "unter", "durch", "nach", "vor", "es", "sich",
+})
+
+_DE_EN_MAP = {
+    "uno": "United Nations",
+    "eu": "European Union",
+    "usa": "United States",
+    "brd": "Germany",
+    "bundesregierung": "German government",
+    "bundestag": "German parliament",
+    "aktie": "stock",
+    "börse": "stock market",
+    "wahl": "election",
+    "krieg": "war",
+    "frieden": "peace",
+    "vertrag": "treaty",
+    "sanktion": "sanctions",
+    "wirtschaft": "economy",
+    "inflation": "inflation",
+    "rezession": "recession",
+    "klimawandel": "climate change",
+    "pandemie": "pandemic",
+    "impfstoff": "vaccine",
+}
+
+
+def _extract_keywords(question_text: str) -> List[str]:
+    """Extrahiert aussagekräftige Schlagworte aus einer Frage."""
+    text = re.sub(r"[?!.,;:\"'()]", " ", question_text)
+    text = re.sub(r"\b\d{1,2}\.\d{1,2}\.\d{4}\b", "", text)  # Daten entfernen
+    words = text.split()
+
+    keywords: List[str] = []
+    for w in words:
+        w_lower = w.lower()
+        if w_lower in _DE_STOPWORDS or len(w) <= 2:
+            continue
+        translated = _DE_EN_MAP.get(w_lower)
+        if translated:
+            keywords.append(translated)
+        elif w[0].isupper() and not re.match(r"^\d{4}$", w):
+            keywords.append(w)
+
+    # Jahrzahl extrahieren falls vorhanden
+    years = re.findall(r"\b(20\d{2})\b", question_text)
+
+    seen: set = set()
+    unique: List[str] = []
+    for k in keywords:
+        if k.lower() not in seen:
+            seen.add(k.lower())
+            unique.append(k)
+
+    return unique[:6], years[:1]
+
+
 def _query_plan_fallback(question_text: str) -> List[str]:
-    """Regelbasierter Fallback falls kein LLM verfügbar."""
+    """Regelbasierter Fallback falls kein LLM verfügbar.
+    Generiert kurze, suchoptimierte Queries statt des vollen Fragesatzes."""
     kind = _question_kind(question_text)
-    q = _normalize_text(question_text)
+    keywords, years = _extract_keywords(question_text)
+    year = years[0] if years else ""
+
+    kw_str = " ".join(keywords[:4])
+    kw_short = " ".join(keywords[:2])
 
     if kind == "world_war":
         return [
@@ -443,20 +530,39 @@ def _query_plan_fallback(question_text: str) -> List[str]:
             "NATO UN major power conflict warning",
             "global war escalation risk Reuters AP",
         ]
-    if kind == "war":
-        return [q, f"{q} Reuters", f"{q} ceasefire diplomacy"]
-    if kind == "economics":
-        return [q, f"{q} Reuters", f"{q} analyst forecast"]
-    if kind == "politics":
-        return [q, f"{q} election results", f"{q} Reuters"]
-    if kind == "technology":
-        return [q, f"{q} announcement", f"{q} Reuters"]
-    if kind == "health":
-        return [q, f"{q} study results", f"{q} WHO FDA"]
-    if kind == "sports":
-        return [q, f"{q} match results", f"{q} championship"]
+    def _with_year(s: str) -> str:
+        return f"{s} {year}".strip() if year and year not in s else s
 
-    return [q, f"{q} Reuters"]
+    if kind == "existence":
+        # Fragen über Fortbestand: zuerst nach Aktivität, dann nach Bedrohungen suchen
+        entity = " ".join(keywords[:2]) if keywords else question_text[:30]
+        return [
+            f"{entity} future {year}".strip() if year else f"{entity} future",
+            f"{entity} dissolution threat",
+            f"{entity} funding crisis reform",
+            f"{entity} continues operations",
+        ]
+    if kind == "war":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} ceasefire", f"{base} Reuters", f"{kw_short} diplomacy".strip()]
+    if kind == "economics":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters", _with_year(f"{kw_short} forecast"), f"{kw_short} analyst outlook"]
+    if kind == "politics":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters", f"{kw_short} future outlook", f"{base} AP news"]
+    if kind == "technology":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} announcement", f"{base} Reuters"]
+    if kind == "health":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} study results", f"{base} WHO FDA"]
+    if kind == "sports":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} results", f"{base} championship"]
+
+    base = kw_str if kw_str else question_text[:50]
+    return [_with_year(base), f"{base} Reuters", f"{kw_short} news" if kw_short else base]
 
 
 def _query_plan(question_text: str) -> List[str]:

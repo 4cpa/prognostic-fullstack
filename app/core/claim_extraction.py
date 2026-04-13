@@ -73,6 +73,15 @@ def _question_kind(question_text: str) -> str:
         return "state_collapse"
     if "krieg" in q or "war" in q or "conflict" in q:
         return "war"
+    # Fortbestand-Fragen: "Besteht X fort?", "Wird X weiterbestehen?", etc.
+    if (
+        " fort?" in q or " fort " in q
+        or "fortbestand" in q or "fortbestehen" in q
+        or "weiterbestehen" in q or "überleben" in q
+        or "dissolution" in q or "still exist" in q
+        or "bleibt bestehen" in q
+    ):
+        return "existence"
     return "general"
 
 
@@ -166,6 +175,33 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
     pro_hits = sum(1 for term in pro_terms if term in text)
     contra_hits = sum(1 for term in contra_terms if term in text)
     uncertainty_hits = sum(1 for term in uncertainty_terms if term in text)
+
+    if q_kind == "existence":
+        # Pro: Institution ist aktiv, plant Zukunft → unterstützt Fortbestand
+        existence_pro = [
+            "hosts", "convenes", "holds conference", "scheduled", "plans",
+            "operational", "continues", "renewed", "strengthened",
+            "budget approved", "member states", "general assembly", "security council",
+            "session", "summit", "annual meeting", "conference", "treaty",
+            "aktiv", "weiterhin", "fortsetzt", "veranstaltet", "tagt",
+        ]
+        # Contra: Bedrohung, Rückzug, Kollaps → gefährdet Fortbestand
+        existence_contra = [
+            "collapse", "financial collapse", "dissolution", "disbanded",
+            "disbands", "defunds", "funding cut", "withdraws from", "exit",
+            "leaves", "quits", "ineffective", "obsolete", "abolished",
+            "paralyzed", "in danger", "financial crisis", "debt", "unpaid dues",
+            "auflösung", "kollaps", "finanzierungskrise", "austritt",
+        ]
+        if _contains_any(text, existence_contra):
+            return "contra"
+        if _contains_any(text, existence_pro):
+            return "pro"
+        if uncertainty_hits >= 1:
+            return "uncertainty"
+        if fallback_stance in CLAIM_TYPES:
+            return fallback_stance
+        return "background"
 
     if q_kind == "world_war":
         direct_world_war_pro = [
