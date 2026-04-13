@@ -667,7 +667,7 @@ def _fetch_candidates(question_text: str) -> List[ResearchSource]:
 def research_sources(
     question_text: str,
     session: Any = None,
-    max_sources: int = 8,
+    max_sources: int = 4,
 ) -> List[Dict[str, Any]]:
     sources = _fetch_candidates(question_text)
 
