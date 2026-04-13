@@ -75,6 +75,7 @@ type FullForecastResponse = {
   answer_rationale_short?: string | null;
   question_type?: string | null;
   scenarios?: ScenarioRecord[] | null;
+  language?: string | null;
 };
 
 // ── Datenzugriff ────────────────────────────────────────────────────────────
@@ -273,6 +274,113 @@ const BAND_TEXT: Record<string, string> = {
   analytical: "Analytisch",
 };
 
+// ── Übersetzungen ───────────────────────────────────────────────────────────
+
+type Lang = "de" | "en" | "fr" | "it" | "es";
+
+const T: Record<Lang, {
+  analysis: string;
+  signals: string;
+  pro: string;
+  contra: string;
+  uncertainty: string;
+  sources: string;
+  probability: string;
+  scenarios: string;
+  noScenarios: string;
+  noPro: string;
+  noContra: string;
+  noUncertainty: string;
+  noSources: string;
+  createdAt: string;
+}> = {
+  de: {
+    analysis: "Analyse",
+    signals: "Signale & Argumente",
+    pro: "Pro",
+    contra: "Contra",
+    uncertainty: "Unsicherheiten",
+    sources: "Quellen",
+    probability: "Wahrscheinlichkeit",
+    scenarios: "Mögliche Szenarien",
+    noScenarios: "Keine Szenarien verfügbar.",
+    noPro: "Keine Pro-Signale",
+    noContra: "Keine Contra-Signale",
+    noUncertainty: "Keine Unsicherheiten",
+    noSources: "Keine Quellen vorhanden.",
+    createdAt: "Forecast vom",
+  },
+  en: {
+    analysis: "Analysis",
+    signals: "Signals & Arguments",
+    pro: "Pro",
+    contra: "Contra",
+    uncertainty: "Uncertainties",
+    sources: "Sources",
+    probability: "Probability",
+    scenarios: "Possible Scenarios",
+    noScenarios: "No scenarios available.",
+    noPro: "No pro signals",
+    noContra: "No contra signals",
+    noUncertainty: "No uncertainties",
+    noSources: "No sources available.",
+    createdAt: "Forecast from",
+  },
+  fr: {
+    analysis: "Analyse",
+    signals: "Signaux & Arguments",
+    pro: "Pour",
+    contra: "Contre",
+    uncertainty: "Incertitudes",
+    sources: "Sources",
+    probability: "Probabilité",
+    scenarios: "Scénarios possibles",
+    noScenarios: "Aucun scénario disponible.",
+    noPro: "Aucun signal positif",
+    noContra: "Aucun signal négatif",
+    noUncertainty: "Aucune incertitude",
+    noSources: "Aucune source disponible.",
+    createdAt: "Prévision du",
+  },
+  it: {
+    analysis: "Analisi",
+    signals: "Segnali & Argomenti",
+    pro: "Pro",
+    contra: "Contro",
+    uncertainty: "Incertezze",
+    sources: "Fonti",
+    probability: "Probabilità",
+    scenarios: "Scenari possibili",
+    noScenarios: "Nessuno scenario disponibile.",
+    noPro: "Nessun segnale positivo",
+    noContra: "Nessun segnale negativo",
+    noUncertainty: "Nessuna incertezza",
+    noSources: "Nessuna fonte disponibile.",
+    createdAt: "Previsione del",
+  },
+  es: {
+    analysis: "Análisis",
+    signals: "Señales & Argumentos",
+    pro: "A favor",
+    contra: "En contra",
+    uncertainty: "Incertidumbres",
+    sources: "Fuentes",
+    probability: "Probabilidad",
+    scenarios: "Posibles escenarios",
+    noScenarios: "No hay escenarios disponibles.",
+    noPro: "Sin señales a favor",
+    noContra: "Sin señales en contra",
+    noUncertainty: "Sin incertidumbres",
+    noSources: "No hay fuentes disponibles.",
+    createdAt: "Pronóstico del",
+  },
+};
+
+function t(lang: string | null | undefined): typeof T["de"] {
+  const l = (lang ?? "de").toLowerCase().slice(0, 2) as Lang;
+  return T[l] ?? T["de"];
+}
+
 // ── Seite ───────────────────────────────────────────────────────────────────
 
 export default async function ForecastDetailPage({ params }: PageProps) {
@@ -296,9 +404,11 @@ export default async function ForecastDetailPage({ params }: PageProps) {
   const answerRationale = full.answer_rationale_short ?? forecast.answer_rationale_short ?? null;
   const questionType  = full.question_type ?? null;
   const scenarios     = (full.scenarios ?? []).filter((s) => s.title);
+  const language      = full.language ?? "de";
+  const tr            = t(language);
 
   // Detect open question: from stored type, answer label, or question text as fallback
-  const OPEN_PREFIXES = /^(was|wer|wann|wo|wie|warum|welche|welcher|welches|wieviel|wie\s+viel|womit|wozu|wohin|wofür|worüber|inwiefern|inwieweit)\b/i;
+  const OPEN_PREFIXES = /^(was|wer|wann|wo|wie|warum|welche[rs]?|wieviel|wie\s+viel|womit|wozu|wohin|wof[üu]r|wor[üu]ber|inwiefern|inwieweit)\b/i;
   const isOpenQuestion =
     questionType === "open" ||
     answerLabel === "analytical" ||
@@ -355,7 +465,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                 ))}
               </div>
             ) : directAnswer ? null : (
-              <p className="text-sm text-slate-500">Keine Szenarien verfügbar.</p>
+              <p className="text-sm text-slate-500">{tr.noScenarios}</p>
             )}
 
             {/* Kurzbegründung */}
@@ -396,7 +506,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
               <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="flex items-baseline justify-between mb-2">
                   <span className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
-                    Berechnete Wahrscheinlichkeit
+                    {tr.probability}
                   </span>
                   <span className="text-2xl font-bold text-slate-950">
                     {toPercent(probability)}
@@ -429,7 +539,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
             className="mb-6 rounded-2xl border border-slate-200 bg-white p-6"
           >
             <h2 id="section-analyse" className="mb-4 text-lg font-semibold text-slate-900">
-              Analyse
+              {tr.analysis}
             </h2>
             <div>{renderMarkdown(explanationMd)}</div>
           </section>
@@ -442,17 +552,17 @@ export default async function ForecastDetailPage({ params }: PageProps) {
             className="mb-6 rounded-2xl border border-slate-200 bg-white p-6"
           >
             <h2 id="section-signale" className="mb-5 text-lg font-semibold text-slate-900">
-              Signale &amp; Argumente
+              {tr.signals}
             </h2>
 
             <div className="grid gap-5 sm:grid-cols-3">
               {/* Pro */}
               <div>
                 <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-green-700">
-                  <span aria-hidden="true">↑</span> Pro
+                  <span aria-hidden="true">↑</span> {tr.pro}
                 </h3>
                 {proClaims.length === 0 ? (
-                  <p className="text-xs text-slate-500">Keine Pro-Signale</p>
+                  <p className="text-xs text-slate-500">{tr.noPro}</p>
                 ) : (
                   <ul className="space-y-3">
                     {proClaims.map((c, i) => (
@@ -482,10 +592,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
               {/* Contra */}
               <div>
                 <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-red-700">
-                  <span aria-hidden="true">↓</span> Contra
+                  <span aria-hidden="true">↓</span> {tr.contra}
                 </h3>
                 {contraClaims.length === 0 ? (
-                  <p className="text-xs text-slate-500">Keine Contra-Signale</p>
+                  <p className="text-xs text-slate-500">{tr.noContra}</p>
                 ) : (
                   <ul className="space-y-3">
                     {contraClaims.map((c, i) => (
@@ -515,10 +625,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
               {/* Unsicherheiten */}
               <div>
                 <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-amber-700">
-                  <span aria-hidden="true">~</span> Unsicherheiten
+                  <span aria-hidden="true">~</span> {tr.uncertainty}
                 </h3>
                 {uncertainties.length === 0 ? (
-                  <p className="text-xs text-slate-500">Keine Unsicherheiten</p>
+                  <p className="text-xs text-slate-500">{tr.noUncertainty}</p>
                 ) : (
                   <ul className="space-y-3">
                     {uncertainties.map((c, i) => (
@@ -555,7 +665,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
             className="mb-6 rounded-2xl border border-slate-200 bg-white p-6"
           >
             <h2 id="section-quellen" className="mb-4 text-lg font-semibold text-slate-900">
-              Quellen ({sources.length})
+              {tr.sources} ({sources.length})
             </h2>
 
             <ul className="divide-y divide-slate-100">
@@ -603,7 +713,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
 
         {/* ── Metadaten (diskret) ── */}
         <p className="text-xs text-slate-400 text-center">
-          Forecast vom {formatDate(forecast.created_at)} · {questionData.slug ?? questionData.id}
+          {tr.createdAt} {formatDate(forecast.created_at)} · {questionData.slug ?? questionData.id}
         </p>
 
       </div>

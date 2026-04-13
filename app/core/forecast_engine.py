@@ -688,62 +688,116 @@ def _question_answer_phrase(question_text: str, bucket: str) -> str:
     return f"{q_raw} ist derzeit noch nicht klar zu beantworten."
 
 
+_OPEN_QUESTION_RE = re.compile(
+    r"^(was|wer|wann|wo|wie|warum|welche[rs]?|wieviel|wie\s+viel|womit|wozu|wohin|wof[üu]r|wor[üu]ber|inwiefern|inwieweit)\b",
+    re.IGNORECASE,
+)
+
+_FALLBACK_OPEN: dict[str, dict[str, str]] = {
+    "de": {
+        "answer": "Die KI-Analyse ist momentan nicht verfügbar. Bitte stelle die Frage erneut, um eine vollständige Einschätzung mit konkreten Szenarien zu erhalten.",
+        "rationale": "Gemini-API nicht erreichbar – kein Szenario-Ergebnis.",
+    },
+    "en": {
+        "answer": "AI analysis is currently unavailable. Please resubmit the question to receive a full assessment with concrete scenarios.",
+        "rationale": "Gemini API unreachable – no scenario result.",
+    },
+    "fr": {
+        "answer": "L'analyse IA est momentanément indisponible. Veuillez soumettre à nouveau la question pour obtenir une évaluation complète.",
+        "rationale": "API Gemini inaccessible – pas de scénario disponible.",
+    },
+    "it": {
+        "answer": "L'analisi AI non è al momento disponibile. Invia nuovamente la domanda per ricevere una valutazione completa con scenari concreti.",
+        "rationale": "API Gemini non raggiungibile – nessun risultato scenario.",
+    },
+    "es": {
+        "answer": "El análisis de IA no está disponible en este momento. Vuelve a enviar la pregunta para obtener una evaluación completa con escenarios concretos.",
+        "rationale": "API de Gemini no accesible – sin resultado de escenario.",
+    },
+}
+
+_FALLBACK_CLOSED: dict[str, dict[str, dict[str, str]]] = {
+    "de": {
+        "likely_yes": {"label": "yes",      "band": "likely",     "word": "Wahrscheinlich ja"},
+        "lean_yes":   {"label": "lean_yes",  "band": "moderate",   "word": "Eher ja"},
+        "uncertain":  {"label": "uncertain", "band": "close_call", "word": "Unklar"},
+        "lean_no":    {"label": "lean_no",   "band": "moderate",   "word": "Eher nein"},
+        "likely_no":  {"label": "no",        "band": "unlikely",   "word": "Wahrscheinlich nein"},
+    },
+    "en": {
+        "likely_yes": {"label": "yes",      "band": "likely",     "word": "Likely yes"},
+        "lean_yes":   {"label": "lean_yes",  "band": "moderate",   "word": "Probably yes"},
+        "uncertain":  {"label": "uncertain", "band": "close_call", "word": "Unclear"},
+        "lean_no":    {"label": "lean_no",   "band": "moderate",   "word": "Probably no"},
+        "likely_no":  {"label": "no",        "band": "unlikely",   "word": "Likely no"},
+    },
+    "fr": {
+        "likely_yes": {"label": "yes",      "band": "likely",     "word": "Probablement oui"},
+        "lean_yes":   {"label": "lean_yes",  "band": "moderate",   "word": "Plutôt oui"},
+        "uncertain":  {"label": "uncertain", "band": "close_call", "word": "Incertain"},
+        "lean_no":    {"label": "lean_no",   "band": "moderate",   "word": "Plutôt non"},
+        "likely_no":  {"label": "no",        "band": "unlikely",   "word": "Probablement non"},
+    },
+    "it": {
+        "likely_yes": {"label": "yes",      "band": "likely",     "word": "Probabilmente sì"},
+        "lean_yes":   {"label": "lean_yes",  "band": "moderate",   "word": "Forse sì"},
+        "uncertain":  {"label": "uncertain", "band": "close_call", "word": "Incerto"},
+        "lean_no":    {"label": "lean_no",   "band": "moderate",   "word": "Forse no"},
+        "likely_no":  {"label": "no",        "band": "unlikely",   "word": "Probabilmente no"},
+    },
+    "es": {
+        "likely_yes": {"label": "yes",      "band": "likely",     "word": "Probablemente sí"},
+        "lean_yes":   {"label": "lean_yes",  "band": "moderate",   "word": "Más bien sí"},
+        "uncertain":  {"label": "uncertain", "band": "close_call", "word": "Incierto"},
+        "lean_no":    {"label": "lean_no",   "band": "moderate",   "word": "Más bien no"},
+        "likely_no":  {"label": "no",        "band": "unlikely",   "word": "Probablemente no"},
+    },
+}
+
+
 def build_direct_answer(
     question_text: Optional[str],
     probability: Optional[float],
+    language: str = "de",
 ) -> dict[str, Any]:
-    q = _clean_text(question_text, "this question")
+    """
+    Fallback wenn Gemini nicht verfügbar.
+    Offene Fragen → kein Ja/Nein, kein %-Wert.
+    Geschlossene Fragen → sprachabhängige Einschätzung.
+    """
+    q = _clean_text(question_text, "")
+    lang = language.lower() if language.lower() in _FALLBACK_CLOSED else "de"
+
+    # Offene Frage erkennen
+    if q and _OPEN_QUESTION_RE.match(q.strip()):
+        fb = _FALLBACK_OPEN.get(lang, _FALLBACK_OPEN["de"])
+        return {
+            "direct_answer": fb["answer"],
+            "answer_label": "analytical",
+            "answer_confidence_band": "analytical",
+            "answer_rationale_short": fb["rationale"],
+            "question_type": "open",
+            "scenarios": [],
+        }
+
+    # Geschlossene Frage
     p = _normalize_probability_value(probability)
-    bucket = _probability_bucket(p)
-
     if p is None:
-        return {
-            "direct_answer": f'Die Frage "{q}" lässt sich derzeit noch nicht belastbar beantworten.',
-            "answer_label": "unknown",
-            "answer_confidence_band": "unknown",
-            "answer_rationale_short": "No usable probability was available.",
-        }
+        bucket = "uncertain"
+    else:
+        bucket = _probability_bucket(p)
+    pct = round((p or 0.5) * 100.0, 1)
 
-    pct = round(p * 100.0, 1)
-    natural_answer = _question_answer_phrase(q, bucket)
-
-    if bucket == "likely_yes":
-        return {
-            "direct_answer": f"{natural_answer} Aktuelle Wahrscheinlichkeit: {pct}%.",
-            "answer_label": "yes",
-            "answer_confidence_band": "likely",
-            "answer_rationale_short": f"Die aktuelle Wahrscheinlichkeit liegt mit {pct}% klar über der Ja-Schwelle.",
-        }
-
-    if bucket == "lean_yes":
-        return {
-            "direct_answer": f"{natural_answer} Aktuelle Wahrscheinlichkeit: {pct}%.",
-            "answer_label": "lean_yes",
-            "answer_confidence_band": "moderate",
-            "answer_rationale_short": f"Die aktuelle Wahrscheinlichkeit liegt mit {pct}% leicht über 50%.",
-        }
-
-    if bucket == "uncertain":
-        return {
-            "direct_answer": f"{natural_answer} Aktuelle Wahrscheinlichkeit: {pct}%.",
-            "answer_label": "uncertain",
-            "answer_confidence_band": "close_call",
-            "answer_rationale_short": f"Die aktuelle Wahrscheinlichkeit liegt mit {pct}% zu nah an 50/50 für eine klare Richtung.",
-        }
-
-    if bucket == "lean_no":
-        return {
-            "direct_answer": f"{natural_answer} Aktuelle Wahrscheinlichkeit: {pct}%.",
-            "answer_label": "lean_no",
-            "answer_confidence_band": "moderate",
-            "answer_rationale_short": f"Die aktuelle Wahrscheinlichkeit liegt mit {pct}% leicht unter 50%.",
-        }
+    closed = _FALLBACK_CLOSED.get(lang, _FALLBACK_CLOSED["de"])
+    entry = closed.get(bucket, closed["uncertain"])
 
     return {
-        "direct_answer": f"{natural_answer} Aktuelle Wahrscheinlichkeit: {pct}%.",
-        "answer_label": "no",
-        "answer_confidence_band": "unlikely",
-        "answer_rationale_short": f"Die aktuelle Wahrscheinlichkeit liegt mit {pct}% klar unter der Nein-Schwelle.",
+        "direct_answer": f"{entry['word']}. ({pct} %)",
+        "answer_label": entry["label"],
+        "answer_confidence_band": entry["band"],
+        "answer_rationale_short": "",
+        "question_type": "closed",
+        "scenarios": [],
     }
 
 
@@ -1013,6 +1067,7 @@ class ForecastEngine:
             direct_answer_payload = build_direct_answer(
                 question_text=question_text,
                 probability=calibrated_probability,
+                language=language,
             )
 
         question_type = direct_answer_payload.get("question_type", "unknown")
@@ -1027,6 +1082,7 @@ class ForecastEngine:
             "probability_model": probability_diagnostics,
             "question_type": question_type,
             "scenarios": scenarios,
+            "language": language,
         }
 
         return {

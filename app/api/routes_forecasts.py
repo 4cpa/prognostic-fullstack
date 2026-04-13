@@ -115,6 +115,7 @@ def _extract_full_payload_from_forecast(forecast: Any) -> dict[str, Any]:
         "answer_rationale_short": _safe_get(forecast, "answer_rationale_short"),
         "question_type": diagnostics.get("question_type") or _safe_get(forecast, "question_type"),
         "scenarios": diagnostics.get("scenarios") or [],
+        "language": diagnostics.get("language") or "de",
     }
 
 
@@ -277,6 +278,7 @@ def get_latest_forecast_full(
         "answer_rationale_short": full_payload.get("answer_rationale_short"),
         "question_type": full_payload.get("question_type"),
         "scenarios": full_payload.get("scenarios") or [],
+        "language": full_payload.get("language") or "de",
     }
 
 
@@ -359,4 +361,5 @@ def recompute_latest_forecast(
         "answer_rationale_short": _safe_get(forecast, "answer_rationale_short"),
         "question_type": ((_safe_get(forecast, "diagnostics") or {}).get("question_type")),
         "scenarios": ((_safe_get(forecast, "diagnostics") or {}).get("scenarios") or []),
+        "language": ((_safe_get(forecast, "diagnostics") or {}).get("language") or "de"),
     }
