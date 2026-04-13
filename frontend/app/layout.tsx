@@ -134,7 +134,31 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icon.png" />
         <meta name="msapplication-config" content="none" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <footer style={{
+          textAlign: "center",
+          padding: "1rem",
+          fontSize: "0.75rem",
+          color: "#94a3b8",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: "0.5rem",
+        }}>
+          <span>Transivroom Division 2026</span>
+          <a
+            href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
+            aria-label="Email senden"
+            style={{ color: "#94a3b8", lineHeight: 1 }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="20" height="16" x="2" y="4" rx="2"/>
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            </svg>
+          </a>
+        </footer>
+      </body>
     </html>
   );
 }
