@@ -438,7 +438,7 @@ export default async function ForecastDetailPage({ params }: PageProps) {
     "bg-red-400";
 
   return (
-    <main id="main-content" className="min-h-screen bg-slate-50">
+    <main id="main-content" className="min-h-screen bg-slate-50 overflow-x-hidden">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
         {/* ── Frage ── */}
@@ -694,8 +694,8 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                         )}
                       </h3>
                       {(s.summary || s.excerpt) && (
-                        <p className="mt-1 text-xs leading-5 text-slate-600 line-clamp-3 break-words">
-                          {s.summary || s.excerpt}
+                        <p className="mt-1 text-xs leading-5 text-slate-600 line-clamp-3 break-all">
+                          {stripHtml(s.summary || s.excerpt || "")}
                         </p>
                       )}
                     </div>
