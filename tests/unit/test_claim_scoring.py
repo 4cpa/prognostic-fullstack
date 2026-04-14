@@ -1,4 +1,7 @@
+import pytest
 from app.core.claim_scoring import score_claims
+
+pytestmark = pytest.mark.unit
 
 
 def _claim(

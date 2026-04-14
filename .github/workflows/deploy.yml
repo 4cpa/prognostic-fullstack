@@ -14,12 +14,9 @@ jobs:
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
-        username: deploy
+        username: transiv
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
-          cd ~/prognostic-fullstack
+          cd /home/transiv/prognostic-fullstack
           git pull origin main
-          docker compose build backend frontend
-          docker stop forecast-frontend forecast-backend
-          docker rm forecast-frontend forecast-backend
-          docker compose up -d backend frontend
+          docker compose up -d --build frontend backend
