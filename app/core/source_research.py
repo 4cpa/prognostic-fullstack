@@ -566,14 +566,7 @@ def _query_plan_fallback(question_text: str) -> List[str]:
 
 
 def _query_plan(question_text: str) -> List[str]:
-    """Generiert Suchanfragen via Gemini, Fallback auf Regellogik."""
-    try:
-        from app.core.llm_service import generate_search_queries
-        queries = generate_search_queries(question_text)
-        if queries:
-            return queries
-    except Exception:
-        pass
+    """Generiert Suchanfragen regelbasiert (kein LLM-Call, spart Quota)."""
     return _query_plan_fallback(question_text)
 
 

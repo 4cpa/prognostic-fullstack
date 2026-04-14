@@ -500,16 +500,7 @@ def extract_claims_from_source(
     *,
     max_claims_per_source: int = 3,
 ) -> List[Dict[str, Any]]:
-    # LLM-Pfad: Claude extrahiert und klassifiziert Claims direkt
-    try:
-        from app.core.llm_service import extract_claims_with_llm
-        llm_claims = extract_claims_with_llm(question_text, source)
-        if llm_claims:
-            return llm_claims[:max_claims_per_source]
-    except Exception:
-        pass
-
-    # Fallback: regelbasierte Keyword-Extraktion
+    # Regelbasierte Keyword-Extraktion (kein LLM-Call, spart Quota)
     source_url = _normalize_text(source.get("url", ""))
     source_title = _normalize_text(source.get("title", ""))
     source_type = _normalize_text(source.get("source_type", "other")) or "other"
