@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useLanguage, type LangCode } from "./language-context";
 
 type QuestionCreateResponse = {
@@ -313,9 +314,19 @@ export default function HomeForm() {
     <div className="w-full space-y-4">
       {/* Tagline — reacts to language selection */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-slate-950">
-          4cpa Prognostic
-        </h1>
+        <div className="flex items-center justify-center gap-3">
+          <Image
+            src="/icon.png"
+            alt="4cpa logo"
+            width={40}
+            height={40}
+            className="rounded-xl"
+            priority
+          />
+          <h1 className="text-4xl font-bold tracking-tight text-slate-950">
+            4cpa Prognostic
+          </h1>
+        </div>
         <p className="mt-2 text-sm text-slate-600">{t.tagline}</p>
       </div>
 
