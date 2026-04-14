@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   creator: "4CPA",
   publisher: "4CPA",
   robots: { index: true, follow: true },
+  verification: {
+    google: "Onz5ZMs_K6h_DErH5uJhQRIwKtXvyaKTTH7MLyj6bNs",
+  },
   alternates: { canonical: BASE_URL },
 
   openGraph: {
