@@ -4,8 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, JSON
 from sqlmodel import SQLModel, Field
 
 
@@ -73,34 +72,34 @@ class Forecast(SQLModel, table=True):
 
     runtime_calibration_meta: Optional[Dict[str, Any]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     calibration_signals: Optional[Dict[str, Any]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     diagnostics: Optional[Dict[str, Any]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
 
     sources: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     top_pro_claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     top_contra_claims: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
     top_uncertainties: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(JSON, nullable=True),
     )
