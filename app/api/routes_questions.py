@@ -12,6 +12,25 @@ from app.models.evidence import EvidenceItem, EvidenceCreate, EvidenceRead
 router = APIRouter(prefix="/questions", tags=["questions"])
 
 
+class QuestionListItem(SQLModel):
+    id: str
+    title: str
+    created_at: datetime
+    status: QuestionStatus
+
+
+@router.get("", response_model=List[QuestionListItem])
+def list_questions(
+    limit: int = 500,
+    session: Session = Depends(get_session),
+):
+    """Gibt alle Fragen zurück — wird vom Sitemap-Generator verwendet."""
+    items = session.exec(
+        select(Question).order_by(Question.created_at.desc()).limit(min(limit, 1000))
+    ).all()
+    return items
+
+
 @router.post("", response_model=QuestionRead)
 def create_question(payload: QuestionCreate, session: Session = Depends(get_session)):
     q = Question(

@@ -4,7 +4,6 @@ const BASE_URL = "https://4cpa.org";
 
 type QuestionItem = {
   id: string;
-  slug?: string | null;
   created_at?: string | null;
 };
 
@@ -37,9 +36,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const questions = await fetchQuestions();
 
   const forecastEntries: MetadataRoute.Sitemap = questions
-    .filter((q) => q.slug || q.id)
+    .filter((q) => q.id)
     .map((q) => ({
-      url: `${BASE_URL}/forecast/${q.slug ?? q.id}`,
+      url: `${BASE_URL}/forecast/${q.id}`,
       lastModified: q.created_at ? new Date(q.created_at) : new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.7,
