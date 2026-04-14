@@ -10,6 +10,32 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.1] – 2026-04-14
+
+### Hinzugefügt
+- Vollständige UI-Internationalisierung (i18n): Sprachauswahl übersetzt die gesamte Startseite (Tagline, Formular-Labels, Placeholder, Fehlermeldungen, „Wie es funktioniert") in DE, EN, FR, IT, ES
+- `LanguageContext` (`language-context.tsx`): geteilter Client-State zwischen `HomeForm` und `FooterContent`
+- `FooterContent.tsx`: Footer-Disclaimer und Lizenztext werden mit der Sprachauswahl übersetzt
+- Ko-fi-Spende-Button im Footer (mehrsprachig, ID `E1E11XU5UD`)
+- Logo (`icon.png`, transparent) neben dem Seitentitel – 92px, vertikal zentriert zu beiden Titelzeilen
+- Indigo→Sky-Farbverlauf als 4px-Balken am oberen Seitenrand (`#6366f1` → `#0ea5e9`)
+
+### Geändert
+- Footer einheitlich dunkel (`#0f172a`) auf allen Plattformen (iOS und Desktop)
+- Layout: `<body>` mit `flex-col min-h-dvh bg-slate-50`; `<main>` mit `flex-1` – Footer klebt stets am unteren Rand
+- `globals.css`: Dark-Mode-Hintergrund-Override entfernt – verhindert schwarzen Footer auf iOS
+- Desktop-Layout: `py-12 sm:py-16` für bessere vertikale Proportionen auf grossen Screens
+- Logo-Hintergrund in `icon.png` entfernt (transparent, via ImageMagick)
+
+### Behoben (CI/CD)
+- `pytestmark = pytest.mark.unit` in `tests/unit/test_claim_scoring.py` ergänzt
+- `pythonpath = .` in `pytest.ini` – `app`-Modul in GitHub Actions importierbar
+- `JSONB` → `JSON` in `app/models/forecast.py` – SQLite-kompatibel für Integrationstests
+- `docker.yml`: Backend-Context von `./backend` auf `.` korrigiert
+- `deploy.yml`: Username `deploy` → `transiv`, korrekter VPS-Pfad
+
+---
+
 ## [0.4.0] – 2026-04-13
 
 ### Hinzugefügt

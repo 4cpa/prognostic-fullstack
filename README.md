@@ -145,12 +145,12 @@ prognostic-fullstack/
 | `direct_answer`             | str?     | Ja/Nein-Direktantwort                         |
 | `answer_label`              | str?     | Menschenlesbares Label (z. B. „Wahrscheinlich") |
 | `answer_confidence_band`    | str?     | Bandbreite (z. B. „60–70 %")                  |
-| `sources`                   | JSONB?   | Recherchierte Quellen                         |
-| `claims`                    | JSONB?   | Extrahierte Claims                            |
-| `top_pro_claims`            | JSONB?   | Stärkste Pro-Argumente                        |
-| `top_contra_claims`         | JSONB?   | Stärkste Contra-Argumente                     |
-| `top_uncertainties`         | JSONB?   | Wichtigste Unsicherheiten                     |
-| `diagnostics`               | JSONB?   | Engine-Diagnosedaten                          |
+| `sources`                   | JSON?    | Recherchierte Quellen                         |
+| `claims`                    | JSON?    | Extrahierte Claims                            |
+| `top_pro_claims`            | JSON?    | Stärkste Pro-Argumente                        |
+| `top_contra_claims`         | JSON?    | Stärkste Contra-Argumente                     |
+| `top_uncertainties`         | JSON?    | Wichtigste Unsicherheiten                     |
+| `diagnostics`               | JSON?    | Engine-Diagnosedaten                          |
 | `inputs_hash`               | str      | SHA-256 der Eingaben (Deduplizierung)         |
 
 ### EvidenceItem
@@ -280,16 +280,41 @@ Kalibrierungsdaten sind über `/backtesting/*` abrufbar und werden nach jeder Fr
 
 ## Frontend
 
-Technologie-Stack: **Next.js 14+ (App Router)**, TypeScript, Tailwind CSS
+Technologie-Stack: **Next.js 16 (App Router)**, TypeScript, Tailwind CSS 4
 
 **Seitenstruktur:**
 
-| Route            | Komponente        | Beschreibung                              |
-|------------------|-------------------|-------------------------------------------|
-| `/`              | `HomeForm.tsx`    | Eingabeformular für Prognosefragen        |
-| `/forecast/[id]` | Forecast-Seite    | Ergebnisanzeige: Wahrscheinlichkeit, Claims, Quellen, Erklärung |
+| Route               | Komponente                          | Beschreibung                                                    |
+|---------------------|-------------------------------------|-----------------------------------------------------------------|
+| `/`                 | `HomeForm.tsx`                      | Eingabeformular, Sprachauswahl, „Wie es funktioniert"           |
+| `/forecast/[slug]`  | Forecast-Seite                      | Wahrscheinlichkeit, Claims, Quellen, Erklärung                  |
 
-Das Frontend kommuniziert direkt mit dem Backend über die REST-API (`/src/lib/api/`).
+**Wichtige Komponenten:**
+
+| Datei                                     | Zweck                                                          |
+|-------------------------------------------|----------------------------------------------------------------|
+| `HomeForm.tsx`                            | Formular + vollständige UI-Übersetzungen für alle 5 Sprachen   |
+| `language-context.tsx`                    | Shared `LanguageContext` – Sprachzustand für die gesamte App   |
+| `FooterContent.tsx`                       | Übersetzter Footer (Disclaimer, Lizenz, Ko-fi-Spende-Button)   |
+| `layout.tsx`                              | Root-Layout: Gradient-Balken oben, dunkel Footer, `min-h-dvh`  |
+| `forecast/[slug]/LanguageSwitcher.tsx`    | Sprachumschalter auf der Forecast-Detailseite                  |
+
+**Internationalisierung:**
+
+Sprachauswahl (DE/EN/FR/IT/ES) übersetzt die gesamte UI client-seitig via `LanguageContext`:
+- Tagline, Formular-Labels, Placeholder, Fehlermeldungen
+- „Wie es funktioniert"-Abschnitt
+- Footer-Disclaimer, Lizenztext und Ko-fi-Button-Label
+- Forecast-Seite (Abschnittsüberschriften, Labels)
+
+Der gewählte Sprachcode wird als `language`-Parameter an den Backend-Forecast-Endpunkt übergeben.
+
+**Design:**
+
+- Indigo→Sky-Gradient-Balken am oberen Seitenrand (4px)
+- Dunkel Footer (`#0f172a`) einheitlich auf iOS und Desktop
+- Logo (`icon.png`, transparent) neben dem Seitentitel
+- Ko-fi-Spende-Button im Footer
 
 ---
 
@@ -329,11 +354,23 @@ pytest --log-file=logs/test.log
 
 ### CI (GitHub Actions)
 
-`.github/workflows/ci.yml` läuft bei jedem Push auf `main` und bei Pull Requests:
-- Startet PostgreSQL als Service-Container
-- Führt Unit- und Integrationstests separat aus
-- Lädt `logs/test.log` + JUnit-XMLs als Artifact hoch (14 Tage Aufbewahrung)
-- Zeigt Testergebnisse direkt im PR als Check an
+Drei Workflows laufen bei jedem Push auf `main`:
+
+| Workflow         | Datei                    | Zweck                                              |
+|------------------|--------------------------|----------------------------------------------------|
+| `CI – Tests`     | `ci.yml`                 | pytest Unit + Integration (Python 3.10 & 3.11)     |
+| `Docker Build`   | `docker.yml`             | Backend + Frontend Docker-Build-Check (kein Push)  |
+| `Deploy`         | `deploy.yml`             | SSH-Deploy auf VPS via `appleboy/ssh-action`        |
+
+**`ci.yml`** – Details:
+- Startet PostgreSQL 15 als Service-Container
+- Führt Unit- (`-m unit`) und Integrationstests (`-m integration`) separat aus
+- `pythonpath = .` in `pytest.ini` macht das `app`-Modul importierbar
+- Lädt `logs/test.log` + JUnit-XMLs als Artifact hoch (14 Tage)
+
+**`deploy.yml`** – Voraussetzungen:
+- GitHub Secret `SERVER_HOST`: IP/Hostname des VPS
+- GitHub Secret `SERVER_SSH_KEY`: privater SSH-Key für User `transiv`
 
 ---
 
