@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Dict, List
 
 from app.core.logger import get_logger
@@ -56,6 +57,27 @@ def _get_api_key() -> str:
     return os.getenv("GEMINI_API_KEY", "").strip()
 
 
+def _parse_json_response(text: str) -> dict:
+    """Robustes JSON-Parsing für Gemini-Antworten.
+    Versucht direktes Parsen, dann Regex-Extraktion des ersten JSON-Objekts.
+    """
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Gemini-2.5-flash kann Thinking-Tokens oder Extra-Text einbetten
+    match = re.search(r'\{[\s\S]*\}', text)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+    log.warning("JSON-Parsing fehlgeschlagen, Fallback auf leeres Dict. Text-Anfang: %.100s", text)
+    return {}
+
+
 def _get_client() -> "genai.Client | None":
     if not _GENAI_AVAILABLE:
         log.warning("google-genai nicht installiert")
@@ -94,7 +116,7 @@ def generate_search_queries(question_text: str) -> List[str]:
                 max_output_tokens=256,
             ),
         )
-        data = json.loads(response.text or "{}")
+        data = _parse_json_response(response.text or "")
         queries = data.get("queries", [])
         return [str(q).strip() for q in queries if str(q).strip()][:5]
     except Exception as exc:
@@ -140,7 +162,7 @@ def extract_claims_with_llm(
             ),
         )
 
-        data = json.loads(response.text or "{}")
+        data = _parse_json_response(response.text or "")
         freshness = float(source.get("freshness_score") or 0.45)
         source_url = source.get("url") or ""
 
@@ -262,7 +284,7 @@ Antworte als JSON."""
                 max_output_tokens=2048,
             ),
         )
-        data = json.loads(response.text or "{}")
+        data = _parse_json_response(response.text or "")
 
         if not data.get("direct_answer") or not data.get("answer_label"):
             return {}
