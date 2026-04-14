@@ -168,13 +168,8 @@ export default function FooterContent() {
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="https://www.transivroom.ch/assets/images/transivroom-banner-new-21-orange-medium-1-666x170.png"
-          alt=""
-          width={48}
-          height={13}
-          style={{ objectFit: "cover", objectPosition: "left center", borderRadius: "2px" }}
-        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/transivroom-icon.png" alt="" width={16} height={16} />
         transivroom
       </a>
 
