@@ -123,7 +123,8 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icon.png" />
         <meta name="msapplication-config" content="none" />
       </head>
-      <body className="bg-slate-50 flex flex-col min-h-dvh" style={{ borderTop: "4px solid transparent", backgroundImage: "linear-gradient(#f8fafc, #f8fafc), linear-gradient(to right, #6366f1, #0ea5e9)", backgroundOrigin: "border-box", backgroundClip: "padding-box, border-box" }}>
+      <body className="bg-slate-50 flex flex-col min-h-dvh">
+        <div aria-hidden="true" style={{ height: "4px", background: "linear-gradient(to right, #6366f1, #0ea5e9)", flexShrink: 0 }} />
         {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
         <a href="#main-content" className="skip-link">
           Zum Hauptinhalt springen
