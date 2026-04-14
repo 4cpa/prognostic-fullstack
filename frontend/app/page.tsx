@@ -72,43 +72,7 @@ export default function HomePage() {
       />
 
       <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-slate-950">
-            4cpa Prognostic
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Frage stellen — KI-Forecast erhalten
-          </p>
-        </div>
-
-        {/* Formular */}
         <HomeForm />
-
-        {/* SEO-Text: für Google sichtbar, für User dezent */}
-        <div className="mt-10 border-t border-slate-200 pt-8 space-y-4 text-sm text-slate-500 leading-6">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-            Wie es funktioniert
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-3 text-xs text-slate-400">
-            <div>
-              <p className="font-medium text-slate-500 mb-1">Frage eingeben</p>
-              <p>Stelle eine beliebige Prognosefrage — z.&nbsp;B. zu Politik, Wirtschaft, Sport oder Technologie.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-500 mb-1">KI analysiert</p>
-              <p>Die Engine recherchiert aktuelle Quellen, extrahiert Signale und berechnet eine kalibrierte Wahrscheinlichkeit.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-500 mb-1">Forecast erhalten</p>
-              <p>Du siehst Pro/Contra-Argumente, konkrete Szenarien und alle analysierten Quellen — in deiner Sprache.</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-400">
-            Verfügbar in Deutsch, English, Français, Italiano und Español.
-            Prognosen für Wahlen, Märkte, Geopolitik, Klimaereignisse und mehr.
-          </p>
-        </div>
       </div>
     </main>
   );
