@@ -846,61 +846,10 @@ def _build_explanation_md(
     top_uncertainties: list[dict[str, Any]],
     runtime_calibration_meta: dict[str, Any],
 ) -> str:
-    direct = build_direct_answer(question_text, calibrated_probability)
-
-    lines: list[str] = []
-    lines.append("# Forecast")
-    lines.append("")
-    lines.append(f"**Frage:** {question_text}")
-    lines.append("")
-    lines.append(f"**Direkte Antwort:** {direct['direct_answer']}")
-    lines.append("")
-    lines.append(f"- Raw Probability: {_format_pct(raw_probability)}")
-    lines.append(f"- Calibrated Probability: {_format_pct(calibrated_probability)}")
-    lines.append(f"- Confidence: {_format_pct(confidence)}")
-    lines.append("")
-
-    if runtime_calibration_meta:
-        lines.append("## Runtime Calibration")
-        lines.append("")
-        for key, value in runtime_calibration_meta.items():
-            lines.append(f"- {key}: {value}")
-        lines.append("")
-
-    if top_pro_claims:
-        lines.append("## Top Pro Claims")
-        lines.append("")
-        for claim in top_pro_claims:
-            lines.append(f"- {claim.get('claim_text', '—')}")
-        lines.append("")
-
-    if top_contra_claims:
-        lines.append("## Top Contra Claims")
-        lines.append("")
-        for claim in top_contra_claims:
-            lines.append(f"- {claim.get('claim_text', '—')}")
-        lines.append("")
-
-    if top_uncertainties:
-        lines.append("## Top Uncertainties")
-        lines.append("")
-        for claim in top_uncertainties:
-            lines.append(f"- {claim.get('claim_text', '—')}")
-        lines.append("")
-
-    if sources:
-        lines.append("## Sources")
-        lines.append("")
-        for source in sources:
-            title = source.get("title") or source.get("url") or "Untitled source"
-            url = source.get("url")
-            if url:
-                lines.append(f"- [{title}]({url})")
-            else:
-                lines.append(f"- {title}")
-        lines.append("")
-
-    return "\n".join(lines).strip() or "Forecast generated."
+    # Kein LLM verfügbar → leere Erklärung zurückgeben.
+    # Einschätzung, Wahrscheinlichkeit, Signale und Quellen werden
+    # bereits in den anderen Karten der Forecast-Seite angezeigt.
+    return ""
 
 
 def _get_runtime_calibration_payload(
