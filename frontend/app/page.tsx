@@ -63,7 +63,7 @@ export default function HomePage() {
   return (
     <main
       id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4"
+      className="flex flex-1 flex-col items-center justify-center px-4 py-12 sm:py-16"
     >
       {/* JSON-LD strukturierte Daten für Google */}
       <script

@@ -123,7 +123,7 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icon.png" />
         <meta name="msapplication-config" content="none" />
       </head>
-      <body>
+      <body className="bg-slate-50 flex flex-col min-h-dvh">
         {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
         <a href="#main-content" className="skip-link">
           Zum Hauptinhalt springen
@@ -138,6 +138,7 @@ export default function RootLayout({
             padding: "1.5rem 1rem 2rem",
             fontSize: "0.8125rem",
             color: "#64748b",
+            backgroundColor: "#f8fafc",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
