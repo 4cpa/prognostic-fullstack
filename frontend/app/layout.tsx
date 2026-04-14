@@ -132,39 +132,61 @@ export default function RootLayout({
           aria-label="Seiteninfos"
           style={{
             textAlign: "center",
-            padding: "1.5rem 1rem",
-            fontSize: "0.875rem",
-            color: "#475569",
+            padding: "1.5rem 1rem 2rem",
+            fontSize: "0.8125rem",
+            color: "#64748b",
             display: "flex",
-            justifyContent: "center",
+            flexDirection: "column",
             alignItems: "center",
-            gap: "0.5rem",
+            gap: "0.75rem",
           }}
         >
-          <span>Transivroom Division 2026</span>
-          <a
-            href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
-            aria-label="E-Mail an admin@4cpa.ch senden"
-            style={{ color: "#475569", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
-          >
-            {/* Icon dekorativ, Text für Screenreader im aria-label */}
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              focusable="false"
+          {/* Impressum */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>Transivroom Division 2026</span>
+            <a
+              href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
+              aria-label="E-Mail an admin@4cpa.ch senden"
+              style={{ color: "#64748b", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
             >
-              <rect width="20" height="16" x="2" y="4" rx="2" />
-              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-            </svg>
-          </a>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+            </a>
+          </div>
+
+          {/* Datenschutz-Disclaimer */}
+          <p style={{ maxWidth: "36rem", lineHeight: "1.6", color: "#94a3b8", fontSize: "0.75rem" }}>
+            Eingaben (Fragen) sowie die generierten Forecasts werden in einer Datenbank gespeichert
+            und zur Analyse und Qualitätsverbesserung genutzt. Bitte keine personenbezogenen Daten eingeben.
+          </p>
+
+          {/* Lizenz */}
+          <p style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+            Inhalte lizenziert unter{" "}
+            <a
+              href="https://creativecommons.org/licenses/by-nc/4.0/"
+              target="_blank"
+              rel="noopener noreferrer license"
+              style={{ color: "#64748b", textDecoration: "underline" }}
+            >
+              CC BY-NC 4.0
+            </a>
+            {" "}· Weitergabe mit Quellenangabe erlaubt · Keine kommerzielle Nutzung
+          </p>
         </footer>
       </body>
     </html>
