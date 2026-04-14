@@ -92,6 +92,7 @@ def _strip_html(text: str) -> str:
     text = re.sub(r"<[^>]*>", " ", text)   # geschlossene Tags
     text = re.sub(r"<[^>]*", " ", text)    # ungeschlossene Tags
     text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    text = text.replace("&nbsp;", " ").replace("&quot;", '"').replace("&#39;", "'")
     return " ".join(text.split()).strip()
 
 
@@ -826,11 +827,11 @@ def _build_summary(
     )
 
     if top_pro_claims:
-        parts.append(f"Stärkstes Pro-Signal: {top_pro_claims[0].get('claim_text', '—')}")
+        parts.append(f"Stärkstes Pro-Signal: {_strip_html(top_pro_claims[0].get('claim_text', '—'))}")
     if top_contra_claims:
-        parts.append(f"Stärkstes Contra-Signal: {top_contra_claims[0].get('claim_text', '—')}")
+        parts.append(f"Stärkstes Contra-Signal: {_strip_html(top_contra_claims[0].get('claim_text', '—'))}")
     if top_uncertainties:
-        parts.append(f"Wichtigste Unsicherheit: {top_uncertainties[0].get('claim_text', '—')}")
+        parts.append(f"Wichtigste Unsicherheit: {_strip_html(top_uncertainties[0].get('claim_text', '—'))}")
 
     return "\n\n".join(parts)
 
