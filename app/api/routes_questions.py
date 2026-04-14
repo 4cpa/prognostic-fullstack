@@ -3,7 +3,7 @@ from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 from app.core.db import get_session
 from app.models.question import Question, QuestionStatus, QuestionCreate, QuestionRead
