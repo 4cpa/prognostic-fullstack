@@ -178,7 +178,7 @@ function stripHtml(html: string): string {
     .replace(/<[^>]*>/g, " ")   // geschlossene Tags → Leerzeichen
     .replace(/<[^>]*/g, " ")    // ungeschlossene Tags (kein >) → Leerzeichen
     .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -237,18 +237,31 @@ function renderMarkdown(md: string): React.ReactNode[] {
 }
 
 function inlineMarkdown(text: string): React.ReactNode {
-  // Handle **bold**
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  // Split on **bold** and [text](url) links
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
   if (parts.length === 1) return text;
   return (
     <>
-      {parts.map((part, i) =>
-        /^\*\*[^*]+\*\*$/.test(part) ? (
-          <strong key={i}>{part.slice(2, -2)}</strong>
-        ) : (
-          part
-        )
-      )}
+      {parts.map((part, i) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (linkMatch) {
+          return (
+            <a
+              key={i}
+              href={linkMatch[2]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-blue-700 hover:text-blue-900 break-all"
+            >
+              {linkMatch[1]}
+            </a>
+          );
+        }
+        return part;
+      })}
     </>
   );
 }
