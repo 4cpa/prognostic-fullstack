@@ -137,8 +137,8 @@ export default function RootLayout({
             textAlign: "center",
             padding: "1.5rem 1rem 2rem",
             fontSize: "0.8125rem",
-            color: "#64748b",
-            backgroundColor: "#f8fafc",
+            color: "#94a3b8",
+            backgroundColor: "#0f172a",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -151,7 +151,7 @@ export default function RootLayout({
             <a
               href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
               aria-label="E-Mail an admin@4cpa.ch senden"
-              style={{ color: "#64748b", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
+              style={{ color: "#94a3b8", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -185,7 +185,7 @@ export default function RootLayout({
               href="https://creativecommons.org/licenses/by-nc/4.0/"
               target="_blank"
               rel="noopener noreferrer license"
-              style={{ color: "#64748b", textDecoration: "underline" }}
+              style={{ color: "#cbd5e1", textDecoration: "underline" }}
             >
               CC BY-NC 4.0
             </a>
