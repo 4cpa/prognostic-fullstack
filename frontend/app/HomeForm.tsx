@@ -313,7 +313,7 @@ export default function HomeForm() {
   return (
     <div className="w-full space-y-4">
       {/* Tagline — reacts to language selection */}
-      <div className="mb-8 flex items-center justify-center gap-5">
+      <div className="mb-8 flex items-start justify-center gap-5">
         <Image
           src="/icon.png"
           alt="4cpa logo"
