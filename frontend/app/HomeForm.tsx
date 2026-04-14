@@ -319,7 +319,7 @@ export default function HomeForm() {
           alt="4cpa logo"
           width={92}
           height={92}
-          className="rounded-xl shrink-0 bg-slate-50"
+          className="shrink-0"
           priority
         />
         <div className="text-left">
