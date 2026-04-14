@@ -169,7 +169,8 @@ export default function FooterContent() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/transivroom-icon.png" alt="" width={16} height={16} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/transivroom-icon.png" alt="" width={16} height={16} style={{ filter: "brightness(0) invert(1)" }} />
         transivroom
       </a>
 
