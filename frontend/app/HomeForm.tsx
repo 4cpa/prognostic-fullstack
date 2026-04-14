@@ -313,21 +313,21 @@ export default function HomeForm() {
   return (
     <div className="w-full space-y-4">
       {/* Tagline — reacts to language selection */}
-      <div className="mb-8 text-center">
-        <div className="flex items-center justify-center gap-3">
-          <Image
-            src="/icon.png"
-            alt="4cpa logo"
-            width={40}
-            height={40}
-            className="rounded-xl"
-            priority
-          />
+      <div className="mb-8 flex items-center justify-center gap-5">
+        <Image
+          src="/icon.png"
+          alt="4cpa logo"
+          width={58}
+          height={58}
+          className="rounded-xl shrink-0"
+          priority
+        />
+        <div className="text-left">
           <h1 className="text-4xl font-bold tracking-tight text-slate-950">
             4cpa Prognostic
           </h1>
+          <p className="mt-1.5 text-sm text-slate-600">{t.tagline}</p>
         </div>
-        <p className="mt-2 text-sm text-slate-600">{t.tagline}</p>
       </div>
 
       {/* Screen-reader live region */}
