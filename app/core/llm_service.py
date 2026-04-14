@@ -22,7 +22,7 @@ try:
 except ImportError:
     _GENAI_AVAILABLE = False
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 _CLAIM_EXTRACTION_SYSTEM = """\
 You are a forecasting analyst. Extract claims from the given source that are relevant to the forecasting question.
