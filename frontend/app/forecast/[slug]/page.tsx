@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -6,6 +7,43 @@ export const revalidate = 0;
 
 type RouteParams = { slug: string } | Promise<{ slug: string }>;
 type PageProps = { params: RouteParams };
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await Promise.resolve(params);
+  const question = await getQuestionBySlug(slug).catch(() => null);
+  if (!question?.id) return {};
+  const full = await getFullForecast(question.id).catch(() => null);
+
+  const title = full?.question?.title || full?.question?.question || question.title || question.question || "Forecast";
+  const directAnswer = full?.direct_answer ?? full?.forecast?.direct_answer ?? null;
+  const prob = full?.calibrated_probability ?? full?.raw_probability ?? null;
+  const probText = typeof prob === "number" ? ` Wahrscheinlichkeit: ${Math.round((prob <= 1 ? prob * 100 : prob) * 10) / 10} %.` : "";
+  const description = directAnswer
+    ? `${directAnswer.slice(0, 140)}${probText}`
+    : `KI-Prognose: ${title}${probText}`;
+
+  const pageUrl = `https://4cpa.org/forecast/${question.slug ?? question.id}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: pageUrl },
+    openGraph: {
+      title,
+      description,
+      url: pageUrl,
+      type: "article",
+      siteName: "4CPA Prognostic Engine",
+      images: [{ url: "https://4cpa.org/social-preview.png", width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["https://4cpa.org/social-preview.png"],
+    },
+  };
+}
 
 // ── Typen ───────────────────────────────────────────────────────────────────
 
@@ -474,8 +512,43 @@ export default async function ForecastDetailPage({ params }: PageProps) {
     barFill >= 40 ? "bg-amber-400" :
     "bg-red-400";
 
+  // JSON-LD für Detailseite
+  const pageUrl = `https://4cpa.org/forecast/${questionData.slug ?? questionData.id}`;
+  const answerText = directAnswer ?? (pctNum !== null ? `Wahrscheinlichkeit: ${pctNum} %` : "");
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": isOpenQuestion ? "Article" : "QAPage",
+    "url": pageUrl,
+    "name": questionText,
+    "headline": questionText,
+    "description": answerText || questionText,
+    "datePublished": forecast.created_at ?? new Date().toISOString(),
+    "dateModified": forecast.created_at ?? new Date().toISOString(),
+    "inLanguage": language,
+    "publisher": {
+      "@type": "Organization",
+      "name": "4CPA Prognostic Engine",
+      "url": "https://4cpa.org",
+    },
+    ...(isOpenQuestion ? {} : {
+      "mainEntity": {
+        "@type": "Question",
+        "name": questionText,
+        "acceptedAnswer": answerText ? {
+          "@type": "Answer",
+          "text": answerText,
+          "url": pageUrl,
+        } : undefined,
+      },
+    }),
+  };
+
   return (
     <main id="main-content" className="min-h-screen bg-slate-50 overflow-x-hidden">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
         {/* ── Frage ── */}
