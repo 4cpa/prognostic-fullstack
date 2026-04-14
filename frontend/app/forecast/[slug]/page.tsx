@@ -690,15 +690,15 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                 <li key={String(s.id ?? i)} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold text-slate-900 leading-5 break-words">
+                      <h3 className="text-sm font-semibold text-slate-900 leading-5 break-all">
                         {s.url ? (
                           <a
                             href={s.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hover:underline text-slate-900 break-all"
+                            className="hover:underline text-slate-900"
                           >
-                            {s.title || s.url}
+                            {s.title || urlHostname(s.url)}
                             <span className="sr-only"> (öffnet in neuem Tab)</span>
                           </a>
                         ) : (
