@@ -123,7 +123,7 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icon.png" />
         <meta name="msapplication-config" content="none" />
       </head>
-      <body className="bg-slate-50 flex flex-col min-h-dvh">
+      <body className="bg-slate-50 flex flex-col min-h-dvh" style={{ borderTop: "4px solid #0f172a" }}>
         {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
         <a href="#main-content" className="skip-link">
           Zum Hauptinhalt springen
