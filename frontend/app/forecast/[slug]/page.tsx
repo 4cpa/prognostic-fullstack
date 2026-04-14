@@ -162,6 +162,17 @@ function urlHostname(url: string): string {
   try { return new URL(url).hostname; } catch { return url.slice(0, 40); }
 }
 
+// Strips markdown link syntax: [title](url) → title
+// Also strips bare URLs that look like http(s)://...
+function cleanTitle(text: string | null | undefined): string {
+  if (!text) return "";
+  // [title](url) → title
+  let t = text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // bare URL as entire string → empty (let caller fall back to hostname)
+  if (/^https?:\/\/\S+$/.test(t.trim())) return "";
+  return t.trim();
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, " ")   // geschlossene Tags → Leerzeichen
@@ -594,10 +605,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                                 rel="noopener noreferrer"
                                 className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || urlHostname(c.source_url)}
+                                {cleanTitle(c.source_title) || urlHostname(c.source_url ?? "")}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
-                            ) : c.source_title}
+                            ) : cleanTitle(c.source_title)}
                           </p>
                         )}
                       </li>
@@ -627,10 +638,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                                 rel="noopener noreferrer"
                                 className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || urlHostname(c.source_url)}
+                                {cleanTitle(c.source_title) || urlHostname(c.source_url ?? "")}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
-                            ) : c.source_title}
+                            ) : cleanTitle(c.source_title)}
                           </p>
                         )}
                       </li>
@@ -660,10 +671,10 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                                 rel="noopener noreferrer"
                                 className="underline hover:text-slate-600 break-all"
                               >
-                                {c.source_title || urlHostname(c.source_url)}
+                                {cleanTitle(c.source_title) || urlHostname(c.source_url ?? "")}
                                 <span className="sr-only"> (öffnet in neuem Tab)</span>
                               </a>
-                            ) : c.source_title}
+                            ) : cleanTitle(c.source_title)}
                           </p>
                         )}
                       </li>
@@ -698,11 +709,11 @@ export default async function ForecastDetailPage({ params }: PageProps) {
                             rel="noopener noreferrer"
                             className="hover:underline text-slate-900"
                           >
-                            {s.title || urlHostname(s.url)}
+                            {cleanTitle(s.title) || urlHostname(s.url ?? "")}
                             <span className="sr-only"> (öffnet in neuem Tab)</span>
                           </a>
                         ) : (
-                          s.title || "Ohne Titel"
+                          cleanTitle(s.title) || "Ohne Titel"
                         )}
                       </h3>
                       {(s.summary || s.excerpt) && (
