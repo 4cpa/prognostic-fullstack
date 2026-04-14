@@ -149,9 +149,7 @@ export default function FooterContent() {
         {t.donate}
       </a>
 
-      </div>
-
-      {/* Transivroom Link */}
+      {/* Transivroom */}
       <a
         href="https://www.transivroom.ch"
         target="_blank"
@@ -159,27 +157,22 @@ export default function FooterContent() {
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "0.5rem",
-          marginTop: "1.25rem",
-          padding: "0.5rem 1.1rem",
-          borderRadius: "0.5rem",
-          border: "1px solid rgba(255,255,255,0.12)",
-          backgroundColor: "rgba(255,255,255,0.05)",
-          color: "#94a3b8",
-          fontSize: "0.75rem",
-          fontWeight: 500,
+          gap: "0.35rem",
+          backgroundColor: "#dc2626",
+          color: "#fff",
+          fontSize: "0.7rem",
+          fontWeight: 600,
+          padding: "0.3rem 0.75rem",
+          borderRadius: "0.4rem",
           textDecoration: "none",
-          letterSpacing: "0.02em",
-          transition: "background 0.15s",
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="2" y1="12" x2="22" y2="12"/>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        </svg>
-        transivroom.ch
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="https://www.transivroom.ch/favicon.ico" alt="" width={13} height={13} style={{ borderRadius: "2px" }} />
+        transivroom
       </a>
+
+      </div>
     </>
   );
 }
