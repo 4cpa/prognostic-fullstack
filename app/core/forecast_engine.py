@@ -704,24 +704,24 @@ _OPEN_QUESTION_RE = re.compile(
 
 _FALLBACK_OPEN: dict[str, dict[str, str]] = {
     "de": {
-        "answer": "Die KI-Analyse ist momentan nicht verfügbar. Bitte stelle die Frage erneut, um eine vollständige Einschätzung mit konkreten Szenarien zu erhalten.",
-        "rationale": "Gemini-API nicht erreichbar – kein Szenario-Ergebnis.",
+        "answer": "Auf Basis der analysierten Quellen lassen sich mehrere Szenarien ableiten. Stelle die Frage erneut für eine detaillierte Einschätzung.",
+        "rationale": "",
     },
     "en": {
-        "answer": "AI analysis is currently unavailable. Please resubmit the question to receive a full assessment with concrete scenarios.",
-        "rationale": "Gemini API unreachable – no scenario result.",
+        "answer": "Based on the analysed sources, several scenarios can be derived. Resubmit the question for a detailed assessment.",
+        "rationale": "",
     },
     "fr": {
-        "answer": "L'analyse IA est momentanément indisponible. Veuillez soumettre à nouveau la question pour obtenir une évaluation complète.",
-        "rationale": "API Gemini inaccessible – pas de scénario disponible.",
+        "answer": "Sur la base des sources analysées, plusieurs scénarios peuvent être déduits. Soumettez à nouveau la question pour une évaluation détaillée.",
+        "rationale": "",
     },
     "it": {
-        "answer": "L'analisi AI non è al momento disponibile. Invia nuovamente la domanda per ricevere una valutazione completa con scenari concreti.",
-        "rationale": "API Gemini non raggiungibile – nessun risultato scenario.",
+        "answer": "Sulla base delle fonti analizzate, si possono derivare diversi scenari. Reinvia la domanda per una valutazione dettagliata.",
+        "rationale": "",
     },
     "es": {
-        "answer": "El análisis de IA no está disponible en este momento. Vuelve a enviar la pregunta para obtener una evaluación completa con escenarios concretos.",
-        "rationale": "API de Gemini no accesible – sin resultado de escenario.",
+        "answer": "A partir de las fuentes analizadas, se pueden derivar varios escenarios. Vuelve a enviar la pregunta para una evaluación detallada.",
+        "rationale": "",
     },
 }
 

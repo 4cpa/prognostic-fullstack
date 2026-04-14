@@ -281,7 +281,7 @@ Antworte als JSON."""
             config=genai_types.GenerateContentConfig(
                 system_instruction=system,
                 response_mime_type="application/json",
-                max_output_tokens=2048,
+                max_output_tokens=8192,
             ),
         )
         data = _parse_json_response(response.text or "")
