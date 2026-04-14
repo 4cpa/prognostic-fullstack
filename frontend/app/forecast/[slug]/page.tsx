@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -478,9 +479,12 @@ export default async function ForecastDetailPage({ params }: PageProps) {
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
         {/* ── Frage ── */}
-        <h1 className="mb-6 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl break-words">
+        <h1 className="mb-4 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl break-words">
           {questionText}
         </h1>
+
+        {/* ── Sprachauswahl ── */}
+        <LanguageSwitcher questionId={question.id} currentLanguage={language} />
 
         {/* ── Offene Frage: Szenarien ── */}
         {isOpenQuestion ? (
