@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { LanguageProvider } from "./language-context";
+import FooterContent from "./FooterContent";
 
 const BASE_URL = "https://4cpa.org";
 const TITLE = "4CPA Prognostic Engine";
@@ -124,75 +126,32 @@ export default function RootLayout({
         <meta name="msapplication-config" content="none" />
       </head>
       <body className="bg-slate-50 flex flex-col min-h-dvh">
-        <div aria-hidden="true" style={{ height: "4px", background: "linear-gradient(to right, #6366f1, #0ea5e9)", flexShrink: 0 }} />
-        {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
-        <a href="#main-content" className="skip-link">
-          Zum Hauptinhalt springen
-        </a>
+        <LanguageProvider>
+          <div aria-hidden="true" style={{ height: "4px", background: "linear-gradient(to right, #6366f1, #0ea5e9)", flexShrink: 0 }} />
+          {/* Skip-Navigation: für Tastatur- und Screenreader-Nutzer */}
+          <a href="#main-content" className="skip-link">
+            Zum Hauptinhalt springen
+          </a>
 
-        {children}
+          {children}
 
-        <footer
-          aria-label="Seiteninfos"
-          style={{
-            textAlign: "center",
-            padding: "1.5rem 1rem 2rem",
-            fontSize: "0.8125rem",
-            color: "#94a3b8",
-            backgroundColor: "#0f172a",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "0.75rem",
-          }}
-        >
-          {/* Impressum */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span>Transivroom Division 2026</span>
-            <a
-              href="mailto:admin@4cpa.ch?subject=Question%20for%204cpa"
-              aria-label="E-Mail an admin@4cpa.ch senden"
-              style={{ color: "#94a3b8", lineHeight: 1, display: "inline-flex", alignItems: "center" }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <rect width="20" height="16" x="2" y="4" rx="2" />
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-              </svg>
-            </a>
-          </div>
-
-          {/* Datenschutz-Disclaimer */}
-          <p style={{ maxWidth: "36rem", lineHeight: "1.6", color: "#94a3b8", fontSize: "0.75rem" }}>
-            Eingaben (Fragen) sowie die generierten Forecasts werden in einer Datenbank gespeichert
-            und zur Analyse und Qualitätsverbesserung genutzt. Bitte keine personenbezogenen Daten eingeben.
-          </p>
-
-          {/* Lizenz */}
-          <p style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-            Inhalte lizenziert unter{" "}
-            <a
-              href="https://creativecommons.org/licenses/by-nc/4.0/"
-              target="_blank"
-              rel="noopener noreferrer license"
-              style={{ color: "#cbd5e1", textDecoration: "underline" }}
-            >
-              CC BY-NC 4.0
-            </a>
-            {" "}· Weitergabe mit Quellenangabe erlaubt · Keine kommerzielle Nutzung
-          </p>
-        </footer>
+          <footer
+            aria-label="Seiteninfos"
+            style={{
+              textAlign: "center",
+              padding: "1.5rem 1rem 2rem",
+              fontSize: "0.8125rem",
+              color: "#94a3b8",
+              backgroundColor: "#0f172a",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.75rem",
+            }}
+          >
+            <FooterContent />
+          </footer>
+        </LanguageProvider>
       </body>
     </html>
   );

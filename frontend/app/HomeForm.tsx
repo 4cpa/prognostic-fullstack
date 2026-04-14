@@ -1,8 +1,8 @@
 "use client";
 
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useLanguage, type LangCode } from "./language-context";
 
 type QuestionCreateResponse = {
   id: string;
@@ -25,8 +25,6 @@ const LANGUAGES = [
   { code: "fr", flag: "🇫🇷", nativeName: "Français", label: "FR" },
   { code: "es", flag: "🇪🇸", nativeName: "Español", label: "ES" },
 ] as const;
-
-type LangCode = (typeof LANGUAGES)[number]["code"];
 
 const UI: Record<
   LangCode,
@@ -199,7 +197,7 @@ function logError(context: string, err: unknown) {
 export default function HomeForm() {
   const router = useRouter();
   const [question, setQuestion] = useState("");
-  const [language, setLanguage] = useState<LangCode>("de");
+  const { language, setLanguage } = useLanguage();
   const [error, setError] = useState<AppError | null>(null);
   const [loading, setLoading] = useState(false);
 
