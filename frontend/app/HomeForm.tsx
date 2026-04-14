@@ -317,8 +317,8 @@ export default function HomeForm() {
         <Image
           src="/icon.png"
           alt="4cpa logo"
-          width={52}
-          height={52}
+          width={64}
+          height={64}
           className="shrink-0"
           priority
         />
