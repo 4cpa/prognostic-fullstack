@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import hashlib
+import json
 import math
 import re
 import urllib.parse
@@ -14,7 +15,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
+BING_NEWS_RSS = "https://www.bing.com/news/search"
+GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc"
+REDDIT_SEARCH_URL = "https://www.reddit.com/search.json"
 REQUEST_TIMEOUT = 12
+
+_BING_MKT_MAP: Dict[str, str] = {
+    "de": "de-DE",
+    "en": "en-US",
+    "fr": "fr-FR",
+    "it": "it-IT",
+    "es": "es-ES",
+}
 
 # Language detection
 _LANG_MARKERS: Dict[str, Tuple[str, ...]] = {
@@ -1155,6 +1167,150 @@ def _google_news_search(query: str, *, limit: int = 15, hl: str = "en-US", gl: s
     return items
 
 
+def _bing_news_search(query: str, *, limit: int = 10, mkt: str = "en-US") -> List[Dict[str, Any]]:
+    """Bing News RSS — liefert oft andere Artikel als Google News."""
+    params = {"q": query, "format": "rss", "mkt": mkt, "count": str(limit)}
+    url = f"{BING_NEWS_RSS}?{urllib.parse.urlencode(params)}"
+
+    try:
+        xml_bytes = _fetch_url(url)
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    for item in root.findall(".//item")[:limit]:
+        raw_title = item.findtext("title") or ""
+        link = item.findtext("link") or ""
+        pub_date = item.findtext("pubDate") or ""
+        description = item.findtext("description") or ""
+        domain = _extract_domain(link)
+
+        items.append({
+            "title": _normalize_text(raw_title),
+            "publisher": _publisher_from_domain(domain),
+            "url": link,
+            "domain": domain,
+            "summary": _normalize_text(description or raw_title),
+            "excerpt": "",
+            "published_at": _published_at_iso(pub_date),
+            "retrieval_method": "bing_news_rss",
+            "query": query,
+        })
+
+    return items
+
+
+def _gdelt_search(query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
+    """GDELT Project API — globale Nachrichtendatenbank, kein API-Key nötig."""
+    params = {
+        "query": query,
+        "mode": "ArtList",
+        "maxrecords": str(min(limit, 25)),
+        "format": "json",
+        "timespan": "2months",
+        "sort": "DateDesc",
+    }
+    url = f"{GDELT_DOC_API}?{urllib.parse.urlencode(params)}"
+
+    try:
+        data_bytes = _fetch_url(url)
+        data = json.loads(data_bytes)
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 503):
+            return []  # Rate-limited — graceful skip
+        return []
+    except Exception:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    for article in (data.get("articles") or [])[:limit]:
+        url_art = article.get("url") or ""
+        title = _normalize_text(article.get("title") or "")
+        domain = article.get("domain") or _extract_domain(url_art)
+        seen_date = article.get("seendate") or ""
+
+        if not title or not url_art:
+            continue
+
+        published_at = None
+        if len(seen_date) >= 15:
+            try:
+                dt = datetime.strptime(seen_date[:15], "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+                published_at = dt.isoformat()
+            except Exception:
+                pass
+
+        items.append({
+            "title": title,
+            "publisher": _publisher_from_domain(domain),
+            "url": url_art,
+            "domain": domain,
+            "summary": title,
+            "excerpt": "",
+            "published_at": published_at,
+            "retrieval_method": "gdelt",
+            "query": query,
+        })
+
+    return items
+
+
+def _reddit_search(query: str, *, limit: int = 8) -> List[Dict[str, Any]]:
+    """Reddit-Suche — community-kuratierte externe Links, kein API-Key nötig."""
+    params = {"q": query, "sort": "relevance", "t": "month", "limit": str(limit), "type": "link"}
+    url = f"{REDDIT_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; ForecastResearch/1.0; +research)",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    for child in ((data.get("data") or {}).get("children") or [])[:limit]:
+        post = child.get("data") or {}
+        title = _normalize_text(post.get("title") or "")
+        url_art = post.get("url") or ""
+        domain = post.get("domain") or _extract_domain(url_art)
+
+        # Self-Posts und reddit-interne Links überspringen
+        if not title or not url_art or "reddit.com" in (domain or ""):
+            continue
+
+        published_at = None
+        created_utc = post.get("created_utc")
+        if created_utc:
+            try:
+                dt = datetime.fromtimestamp(float(created_utc), tz=timezone.utc)
+                published_at = dt.isoformat()
+            except Exception:
+                pass
+
+        selftext = _normalize_text(post.get("selftext") or "")
+        items.append({
+            "title": title,
+            "publisher": _publisher_from_domain(domain),
+            "url": url_art,
+            "domain": domain,
+            "summary": selftext[:300] if selftext else title,
+            "excerpt": "",
+            "published_at": published_at,
+            "retrieval_method": "reddit",
+            "query": query,
+        })
+
+    return items
+
+
 # ---------------------------------------------------------------------------
 # Kandidaten normalisieren & deduplizieren
 # ---------------------------------------------------------------------------
@@ -1302,32 +1458,55 @@ def _dedupe_sources(sources: List[ResearchSource]) -> List[ResearchSource]:
 
 
 def _fetch_candidates(question_text: str) -> List[ResearchSource]:
-    """Sucht in ALLEN verfügbaren Sprachen parallel für maximale Abdeckung."""
+    """Sucht parallel über Google News, Bing News, GDELT und Reddit in allen Sprachen."""
     queries = _query_plan(question_text)
     lang = _detect_language(question_text)
     native_params = _LANG_NEWS_PARAMS.get(lang, _LANG_NEWS_PARAMS["en"])
+    native_mkt = _BING_MKT_MAP.get(lang, "en-US")
 
-    # Alle (query, lang_params)-Paare aufbauen — jede Query in jeder Sprache
+    # (engine, query, kwargs, limit)
     search_tasks: List[tuple] = []
-    for query in queries:
-        for lang_params in _LANG_NEWS_PARAMS.values():
-            search_tasks.append((query, lang_params, 8))
 
-    # Rohe Frage zusätzlich in Muttersprache suchen
+    for query in queries:
+        # Google News: alle 5 Sprachen
+        for lp in _LANG_NEWS_PARAMS.values():
+            search_tasks.append(("google", query, lp, 8))
+        # Bing News: alle 5 Sprachen
+        for mkt in _BING_MKT_MAP.values():
+            search_tasks.append(("bing", query, {"mkt": mkt}, 8))
+
+    # GDELT (hauptsächlich EN): erste 2 Queries
+    for query in queries[:2]:
+        search_tasks.append(("gdelt", query, {}, 10))
+
+    # Reddit: erste Query (community-Perspektive)
+    if queries:
+        search_tasks.append(("reddit", queries[0], {}, 8))
+
+    # Rohe Frage in Muttersprache: Google + Bing
     raw_query = question_text.strip().rstrip("?").strip()[:120]
     if raw_query:
-        search_tasks.append((raw_query, native_params, 10))
+        search_tasks.append(("google", raw_query, native_params, 10))
+        search_tasks.append(("bing",   raw_query, {"mkt": native_mkt}, 10))
+        search_tasks.append(("gdelt",  raw_query, {}, 8))
 
     def _search(args: tuple) -> List[Dict[str, Any]]:
-        query, params, limit = args
+        engine, query, kwargs, limit = args
         try:
-            return _google_news_search(query, limit=limit, **params)
+            if engine == "google":
+                return _google_news_search(query, limit=limit, **kwargs)
+            if engine == "bing":
+                return _bing_news_search(query, limit=limit, mkt=kwargs.get("mkt", "en-US"))
+            if engine == "gdelt":
+                return _gdelt_search(query, limit=limit)
+            if engine == "reddit":
+                return _reddit_search(query, limit=limit)
         except Exception:
-            return []
+            pass
+        return []
 
     raw_items: List[Dict[str, Any]] = []
-    # Parallel ausführen mit max. 12 gleichzeitigen Requests
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(_search, task) for task in search_tasks]
         for future in as_completed(futures, timeout=REQUEST_TIMEOUT + 5):
             try:
