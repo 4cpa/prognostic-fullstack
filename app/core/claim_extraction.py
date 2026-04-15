@@ -147,29 +147,23 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
         "zurückhaltung",
     ]
     uncertainty_terms = [
-        "may",
-        "might",
-        "could",
-        "risk",
-        "warning",
-        "concern",
-        "uncertain",
-        "volatility",
-        "tension",
-        "scenario",
-        "possible",
-        "unlikely",
-        "likely",
-        "könnte",
-        "risiko",
-        "warnung",
-        "sorge",
-        "unsicher",
-        "spannung",
-        "szenario",
-        "möglich",
-        "wahrscheinlich",
-        "unwahrscheinlich",
+        # EN
+        "may", "might", "could", "risk", "warning", "concern", "uncertain",
+        "volatility", "tension", "scenario", "possible", "unlikely", "likely",
+        "expected", "forecast", "projected", "estimated", "predicted",
+        "analysts expect", "could rise", "could fall", "at risk",
+        "remains unclear", "depends on", "if", "unless",
+        # DE
+        "könnte", "risiko", "warnung", "sorge", "unsicher", "spannung",
+        "szenario", "möglich", "wahrscheinlich", "unwahrscheinlich",
+        "erwartet", "prognose", "geschätzt", "vorausgesagt", "fraglich",
+        "unklar", "falls", "sofern", "wenn", "abhängt",
+        # FR
+        "pourrait", "risque", "avertissement", "incertain", "possible",
+        "probable", "improbable", "prévu", "estimé", "selon les prévisions",
+        # IT / ES
+        "potrebbe", "rischio", "incerto", "possibile", "previsto",
+        "podría", "riesgo", "incierto", "posible", "previsto",
     ]
 
     pro_hits = sum(1 for term in pro_terms if term in text)
@@ -201,7 +195,7 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
             return "uncertainty"
         if fallback_stance in CLAIM_TYPES:
             return fallback_stance
-        return "background"
+        return "uncertainty"
 
     if q_kind == "world_war":
         direct_world_war_pro = [
@@ -299,7 +293,7 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
         if uncertainty_hits >= 1:
             return "uncertainty"
 
-        return "background"
+        return "uncertainty"
 
     if q_kind == "eu_breakup":
         direct_eu_breakup_pro = [
@@ -331,7 +325,7 @@ def _infer_claim_type(question_text: str, sentence: str, fallback_stance: str) -
         return "uncertainty"
     if fallback_stance in CLAIM_TYPES:
         return fallback_stance
-    return "background"
+    return "uncertainty"
 
 
 def _claim_confidence(
@@ -523,8 +517,13 @@ def extract_claims_from_source(
             continue
 
         claim_type = _infer_claim_type(question_text, sentence, fallback_stance)
+        # Keep uncertainty claims; only skip pure background noise
         if claim_type == "background":
-            continue
+            # Promote to uncertainty if sentence has enough content
+            if len(sentence) >= 60:
+                claim_type = "uncertainty"
+            else:
+                continue
 
         claim_confidence = _claim_confidence(
             question_text=question_text,

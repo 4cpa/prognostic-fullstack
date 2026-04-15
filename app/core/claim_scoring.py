@@ -22,7 +22,10 @@ def _source_type_weight(source_type: str) -> float:
         "wire": 0.92,
         "research": 0.89,
         "major_media": 0.82,
+        "national_media": 0.72,
         "other": 0.60,
+        "alternative": 0.30,
+        "fallback": 0.30,
     }.get((source_type or "other").strip().lower(), 0.60)
 
 

@@ -15,6 +15,35 @@ import xml.etree.ElementTree as ET
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 REQUEST_TIMEOUT = 12
 
+# Language detection
+_LANG_MARKERS: Dict[str, Tuple[str, ...]] = {
+    "de": ("der", "die", "das", "ist", "und", "wird", "für", "nicht", "wir", "ich", "auf", "mit", "als",
+           "oder", "dass", "sich", "auch", "beim", "vom", "zur", "nach", "wenn", "werden", "haben"),
+    "fr": ("le", "la", "les", "est", "et", "pour", "dans", "qui", "que", "une", "avec", "sur", "au",
+           "du", "pas", "plus", "nous", "sera", "sont", "quel", "quelle", "quels", "quelles", "très",
+           "cette", "ces", "leur", "ils", "elle", "prochain", "prochaine", "dernier"),
+    "it": ("il", "la", "gli", "per", "con", "che", "una", "del", "nei", "sono", "non", "questo",
+           "dalla", "nella", "delle", "quale", "quando", "sarà", "hanno", "loro", "anche"),
+    "es": ("el", "los", "para", "con", "que", "una", "del", "por", "nos", "como", "pero", "sus",
+           "esto", "será", "han", "cuando", "qué", "cuándo", "próximo", "última", "también"),
+}
+
+_LANG_NEWS_PARAMS: Dict[str, Dict[str, str]] = {
+    "de": {"hl": "de", "gl": "DE", "ceid": "DE:de"},
+    "fr": {"hl": "fr", "gl": "FR", "ceid": "FR:fr"},
+    "it": {"hl": "it", "gl": "IT", "ceid": "IT:it"},
+    "es": {"hl": "es", "gl": "ES", "ceid": "ES:es"},
+    "en": {"hl": "en-US", "gl": "US", "ceid": "US:en"},
+}
+
+
+def _detect_language(text: str) -> str:
+    words = set(re.findall(r'\b[a-zäöüàâéèêëïîôùûüçæœ]{2,}\b', text.lower()))
+    scores = {lang: sum(1 for m in markers if m in words) for lang, markers in _LANG_MARKERS.items()}
+    best_lang = max(scores, key=lambda l: scores[l])
+    # Threshold 1 so single strong marker (e.g. "quel", "será") suffices for short questions
+    return best_lang if scores[best_lang] >= 1 else "en"
+
 
 # ---------------------------------------------------------------------------
 # Publisher-Klassifizierung
@@ -32,6 +61,8 @@ RESEARCH_PUBLISHER_PATTERNS = (
     "international crisis group", "csis", "bruegel", "ecfr", "cfr",
     "ifo", "diw berlin", "bertelsmann", "swp berlin", "dgap", "snf", "nber",
     "imf.org", "worldbank.org", "piie.com", "wilsoncenter",
+    "nature.com", "thelancet.com", "sciencemag.org", "newscientist.com",
+    "scientificamerican.com", "pnas.org", "bmj.com",
 )
 
 # Nationale & regionale Medien (mittlere Glaubwürdigkeit)
@@ -85,7 +116,8 @@ _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
     ("economics", (
         "stock", "aktie", "price", "preis", "market", "börse", "crypto", "bitcoin",
         "inflation", "recession", "gdp", "interest rate", "zinsen", "economy",
-        "wirtschaft", "dax", "nasdaq", "s&p", "dollar", "euro", "currency",
+        "wirtschaft", "dax", "nasdaq", "s&p", "dollar", " euro ", "currency",
+        "eurozone", "eurokurs",
     )),
     ("politics", (
         "election", "wahl", "president", "präsident", "chancellor", "kanzler",
@@ -96,9 +128,10 @@ _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
         "sanktion", "sanction", "diplomat", "treaty", "vertrag", "summit", "gipfel",
     )),
     ("technology", (
-        "ai", "artificial intelligence", "software", "app", "tech", "startup",
+        " ai ", "artificial intelligence", "software", " app ", "tech startup",
         "apple", "google", "microsoft", "meta", "openai", "chip", "semiconductor",
-        "smartphone", "electric vehicle", "ev", "tesla",
+        "smartphone", " ev ", "electric vehicle", "tesla", "iphone", "android",
+        "roboter", "robot", "automation", "digitalisierung", "digitalization",
     )),
     ("health", (
         "vaccine", "impfstoff", "pandemic", "pandemie", "virus", "disease",
@@ -121,6 +154,65 @@ _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
         "school reform", "education reform", "curriculum", "school system", "university",
         "higher education", "vocational training", "education policy", "pedagogy",
         "teaching", "learning", "literacy", "edk", "sbfi", "skbf",
+    )),
+    ("culture", (
+        "kunst", "musik", "film", "kino", "theater", "oper", "museum", "ausstellung",
+        "literatur", "buch", "autor", "festival", "konzert", "kulturerbe",
+        "art", "music", "cinema", "theatre", "opera", "museum", "exhibition",
+        "literature", "book", "author", "festival", "concert", "heritage",
+    )),
+    ("media", (
+        "zeitung", "fernsehen", "radio", "streaming", "soziale medien", "journalismus",
+        "redaktion", "verlag", "medienkonzern", "pressewesen", "nachrichten",
+        "newspaper", "television", "broadcasting", "streaming", "social media",
+        "journalism", "editorial", "publisher", "media group", "press", "newsroom",
+        "netflix", "spotify", "youtube", "tiktok", "instagram", "twitter", "x.com",
+    )),
+    ("industry", (
+        "industrie", "fabrik", "produktion", "fertigung", "automobil", "auto",
+        "stahl", "chemie", "pharma", "rüstung", "bergbau", "rohstoff",
+        "industry", "factory", "production", "manufacturing", "automotive", "car",
+        "steel", "chemical", "pharma", "defense", "mining", "raw material",
+        "lieferkette", "supply chain", "export", "import", "zoll", "tariff",
+    )),
+    ("energy", (
+        "energie", "strom", "gas", "öl", "kernkraft", "kernenergie", "solar", "windkraft",
+        "kohle", "energiewende", "kraftwerk", "strommix", "gaspreise", "ölpreis",
+        "energy transition", "electricity", "nuclear energy", "renewable energy",
+        "power plant", "opec", " iea ", "lng", "pipeline", "power grid",
+        "strompreis", "gasversorgung", "energieversorgung",
+    )),
+    ("science", (
+        "forschung", "wissenschaft", "weltraum", "raumfahrt", "physik", "biologie",
+        "genforschung", "quantencomputer", "nasa", "esa", "cern",
+        "research", "science", "space", "physics", "biology", "genome",
+        "quantum", "particle", "astronomy", "satellite", "rocket",
+    )),
+    ("finance", (
+        "bank", "bankrott", "kredit", "zinsen", "immobilien", "fonds", "hedge",
+        "versicherung", "rente", "pension", "dividende", "anleihe", "kapitalmarkt",
+        "banking", "bankruptcy", "credit", "interest rate", "real estate", "fund",
+        "insurance", "pension", "dividend", "bond", "capital market",
+        "snb", "swiss national bank", "nationalbank",
+    )),
+    ("transport", (
+        "flugzeug", "airline", "flughafen", "bahn", "zug", "schiff", "hafen",
+        "autobahn", "verkehr", "logistik", "lieferdienst",
+        "airline", "airport", "railway", "train", "ship", "port",
+        "highway", "traffic", "logistics", "freight", "aviation",
+        "swiss", "lufthansa", "sbb", "sncf", "db bahn",
+    )),
+    ("law", (
+        "gericht", "urteil", "gesetz", "klage", "strafrecht", "verfassung",
+        "bundesgericht", "europäischer gerichtshof", "menschenrechte",
+        "court", "ruling", "judgment", "law", "legislation", "lawsuit", "criminal",
+        "constitution", "supreme court", "echr", "human rights", "sentence",
+    )),
+    ("social", (
+        "migration", "asyl", "flüchtling", "bevölkerung", "armut", "wohnen",
+        "sozialversicherung", "rente", "altersvorsorge", "gleichstellung",
+        "migration", "asylum", "refugee", "population", "poverty", "housing",
+        "social security", "pension", "retirement", "gender equality",
     )),
 ]
 
@@ -199,6 +291,60 @@ _STANCE_SIGNALS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...]]] = {
         ("offensive", "invasion", "attack", "airstrikes", "casualties", "escalation"),
         ("ceasefire", "peace talks", "withdrawal", "agreement", "truce", "mediation"),
     ),
+    "culture": (
+        ("opens", "launches", "awarded", "record attendance", "new exhibition", "premiere",
+         "eröffnet", "ausgezeichnet", "rekordbesuch", "uraufführung"),
+        ("closes", "cancelled", "funding cut", "protest", "controversy", "scandal",
+         "schliesst", "abgesagt", "förderkürzung", "skandal"),
+    ),
+    "media": (
+        ("growth", "record subscribers", "launches", "acquires", "partnership", "expands",
+         "wachstum", "rekordabo", "übernimmt", "fusion"),
+        ("layoffs", "shutdown", "decline", "loses", "censorship", "fine",
+         "entlassungen", "schliessung", "rückgang", "zensur", "strafe"),
+    ),
+    "industry": (
+        ("record output", "expansion", "investment", "orders", "growth", "profit",
+         "rekordproduktion", "expansion", "investition", "aufträge"),
+        ("decline", "plant closure", "layoffs", "strike", "shortage", "tariff",
+         "rückgang", "werksschliessung", "entlassungen", "streik", "mangel"),
+    ),
+    "energy": (
+        ("record output", "new capacity", "cheaper", "surplus", "expansion", "agreement",
+         "rekord", "günstigerer", "überschuss"),
+        ("shortage", "blackout", "price spike", "crisis", "sanction", "cut",
+         "engpass", "stromausfall", "preisanstieg", "krise"),
+    ),
+    "science": (
+        ("breakthrough", "discovery", "launch", "approved", "record", "milestone",
+         "durchbruch", "entdeckung", "start", "genehmigt"),
+        ("fails", "delayed", "cancelled", "budget cut", "explodes",
+         "scheitert", "verzögert", "abgesagt", "budgetkürzung"),
+    ),
+    "finance": (
+        ("profit", "record", "growth", "approved", "stable", "upgrade",
+         "gewinn", "rekord", "wachstum", "stabil"),
+        ("loss", "default", "fine", "scandal", "downgrade", "collapse",
+         "verlust", "ausfall", "strafe", "skandal", "kollaps"),
+    ),
+    "transport": (
+        ("new route", "expansion", "record passengers", "on time", "investment",
+         "neue strecke", "expansion", "rekordpassagiere", "pünktlich"),
+        ("strike", "delay", "cancellation", "crash", "shutdown", "fine",
+         "streik", "verspätung", "ausfall", "absturz", "strafe"),
+    ),
+    "law": (
+        ("upheld", "acquitted", "passed", "reform approved", "rights protected",
+         "bestätigt", "freigesprochen", "verabschiedet", "rechte gestärkt"),
+        ("convicted", "violated", "struck down", "appeal failed", "scandal",
+         "verurteilt", "verletzt", "gekippt", "berufung abgelehnt"),
+    ),
+    "social": (
+        ("integration", "increase benefits", "new housing", "reform passed", "rights expanded",
+         "integration", "leistungserhöhung", "neuer wohnraum", "reform"),
+        ("crisis", "cuts", "protest", "conflict", "shortage", "deportation",
+         "krise", "kürzungen", "protest", "konflikt", "mangel", "abschiebung"),
+    ),
     "education": (
         ("reform", "new curriculum", "overhaul", "restructure", "initiative", "pilot",
          "harmos", "new law", "bildungsreform", "lehrplanrevision", "neue schule"),
@@ -217,6 +363,15 @@ MIN_RELEVANCE_BY_KIND: Dict[str, float] = {
     "sports": 0.06,
     "climate": 0.06,
     "education": 0.05,
+    "culture": 0.05,
+    "media": 0.05,
+    "industry": 0.05,
+    "energy": 0.06,
+    "science": 0.05,
+    "finance": 0.06,
+    "transport": 0.05,
+    "law": 0.05,
+    "social": 0.05,
     "general": 0.05,
 }
 
@@ -290,6 +445,61 @@ OFFICIAL_SOURCES_CATALOG: Dict[str, List[Dict[str, str]]] = {
     "existence": [
         {"title": "UN General Assembly", "url": "https://www.un.org/en/ga/", "publisher": "UN General Assembly", "summary": "UN General Assembly news and resolutions"},
         {"title": "European Parliament", "url": "https://www.europarl.europa.eu/news/en/", "publisher": "European Parliament", "summary": "EU Parliament news"},
+    ],
+    "culture": [
+        {"title": "UNESCO Culture", "url": "https://www.unesco.org/en/culture/news", "publisher": "UNESCO", "summary": "UNESCO culture news"},
+        {"title": "BAK Schweiz", "url": "https://www.bak.admin.ch/bak/de/home/aktuell/medienmitteilungen.html", "publisher": "BAK", "summary": "Bundesamt für Kultur Schweiz"},
+        {"title": "Kulturstaatsministerium DE", "url": "https://www.bundesregierung.de/breg-de/themen/kultur-und-medien", "publisher": "Kulturstaatsministerium", "summary": "Deutsche Kulturpolitik"},
+    ],
+    "media": [
+        {"title": "Reuters Institute", "url": "https://reutersinstitute.politics.ox.ac.uk/news", "publisher": "Reuters Institute", "summary": "Global journalism and media research"},
+        {"title": "EBU News", "url": "https://www.ebu.ch/news", "publisher": "EBU", "summary": "European Broadcasting Union news"},
+        {"title": "Ofcom News", "url": "https://www.ofcom.org.uk/news", "publisher": "Ofcom", "summary": "UK media regulator news"},
+    ],
+    "industry": [
+        {"title": "ILO News", "url": "https://www.ilo.org/global/about-the-ilo/newsroom/news/lang--en/index.htm", "publisher": "ILO", "summary": "International Labour Organization news"},
+        {"title": "WEF Industry", "url": "https://www.weforum.org/agenda/industry/", "publisher": "WEF", "summary": "World Economic Forum industry news"},
+        {"title": "OECD Industry", "url": "https://www.oecd.org/industry/", "publisher": "OECD Industry", "summary": "OECD industry and enterprise statistics"},
+        {"title": "SECO Industrie", "url": "https://www.seco.admin.ch/seco/de/home/Standortfoerderung/Wirtschaftspolitik.html", "publisher": "SECO", "summary": "Swiss economic and industry policy"},
+    ],
+    "energy": [
+        {"title": "IEA News", "url": "https://www.iea.org/news", "publisher": "IEA", "summary": "International Energy Agency news"},
+        {"title": "IAEA News", "url": "https://www.iaea.org/newscenter/news", "publisher": "IAEA", "summary": "International Atomic Energy Agency news"},
+        {"title": "IRENA News", "url": "https://www.irena.org/News", "publisher": "IRENA", "summary": "International Renewable Energy Agency news"},
+        {"title": "Elcom Schweiz", "url": "https://www.elcom.admin.ch/elcom/de/home/dokumentation/medienmitteilungen.html", "publisher": "ElCom", "summary": "Schweizer Elektrizitätskommission"},
+        {"title": "Bundesnetzagentur DE", "url": "https://www.bundesnetzagentur.de/DE/Allgemeines/Presse/news.html", "publisher": "Bundesnetzagentur", "summary": "German energy and network regulator"},
+    ],
+    "science": [
+        {"title": "NASA News", "url": "https://www.nasa.gov/news/", "publisher": "NASA", "summary": "NASA space and science news"},
+        {"title": "ESA News", "url": "https://www.esa.int/Newsroom", "publisher": "ESA", "summary": "European Space Agency news"},
+        {"title": "CERN Press", "url": "https://press.cern/news", "publisher": "CERN", "summary": "CERN particle physics news"},
+        {"title": "Nature News", "url": "https://www.nature.com/news", "publisher": "Nature", "summary": "Nature scientific news"},
+        {"title": "SNF Medienmitteilungen", "url": "https://www.snf.ch/de/aktuelles/medienmitteilungen/", "publisher": "SNF", "summary": "Schweizerischer Nationalfonds Medienmitteilungen"},
+    ],
+    "finance": [
+        {"title": "BIS News", "url": "https://www.bis.org/press/", "publisher": "BIS", "summary": "Bank for International Settlements press"},
+        {"title": "FINMA Medienmitteilungen", "url": "https://www.finma.ch/de/news/medienmitteilungen/", "publisher": "FINMA", "summary": "Schweizer Finanzmarktaufsicht"},
+        {"title": "SNB News", "url": "https://www.snb.ch/de/mmr/reference/pre_2024/source.en.html", "publisher": "SNB", "summary": "Swiss National Bank news"},
+        {"title": "FSB Press", "url": "https://www.fsb.org/press/", "publisher": "FSB", "summary": "Financial Stability Board press releases"},
+        {"title": "BaFin News", "url": "https://www.bafin.de/DE/Presse/Pressemitteilungen/pressemitteilungen_node.html", "publisher": "BaFin", "summary": "German financial regulator news"},
+    ],
+    "transport": [
+        {"title": "ICAO News", "url": "https://www.icao.int/Newsroom/Pages/default.aspx", "publisher": "ICAO", "summary": "International Civil Aviation Organization news"},
+        {"title": "ITF-OECD Transport", "url": "https://www.itf-oecd.org/news", "publisher": "ITF-OECD", "summary": "International Transport Forum news"},
+        {"title": "EASA News", "url": "https://www.easa.europa.eu/en/newsroom-and-events/news", "publisher": "EASA", "summary": "European Aviation Safety Agency news"},
+        {"title": "ASTRA Schweiz", "url": "https://www.astra.admin.ch/astra/de/home/themen/netzentwicklung/medienmitteilungen.html", "publisher": "ASTRA", "summary": "Bundesamt für Strassen Schweiz"},
+    ],
+    "law": [
+        {"title": "ECHR Press", "url": "https://www.echr.coe.int/pages/home.aspx?p=press", "publisher": "ECHR", "summary": "European Court of Human Rights press"},
+        {"title": "ICJ News", "url": "https://www.icj-cij.org/press-releases", "publisher": "ICJ", "summary": "International Court of Justice press releases"},
+        {"title": "Bundesgericht CH", "url": "https://www.bger.ch/index/press/press-inherit-template/pressPublications.htm", "publisher": "Bundesgericht", "summary": "Schweizer Bundesgericht Medienmitteilungen"},
+        {"title": "EuGH Pressemitteilungen", "url": "https://curia.europa.eu/jcms/jcms/Jo2_7052/", "publisher": "EuGH", "summary": "Europäischer Gerichtshof Pressemitteilungen"},
+    ],
+    "social": [
+        {"title": "UNHCR News", "url": "https://www.unhcr.org/news/", "publisher": "UNHCR", "summary": "UN Refugee Agency news"},
+        {"title": "IOM News", "url": "https://www.iom.int/news", "publisher": "IOM", "summary": "International Organization for Migration news"},
+        {"title": "SEM Schweiz", "url": "https://www.sem.admin.ch/sem/de/home/sem/aktuell/medienmitteilungen.html", "publisher": "SEM", "summary": "Staatssekretariat für Migration Schweiz"},
+        {"title": "BAMF Nachrichten", "url": "https://www.bamf.de/DE/Presse/Pressemitteilungen/pressemitteilungen-node.html", "publisher": "BAMF", "summary": "Bundesamt für Migration und Flüchtlinge DE"},
     ],
 }
 
@@ -677,6 +887,85 @@ _DE_EN_MAP = {
     "gesetz": "law",
     "volksinitiative": "popular initiative Switzerland",
     "referendum": "referendum",
+    # Kultur
+    "film": "film",
+    "kino": "cinema",
+    "theater": "theatre",
+    "oper": "opera",
+    "konzert": "concert",
+    "ausstellung": "exhibition",
+    "festival": "festival",
+    "literatur": "literature",
+    # Medien
+    "zeitung": "newspaper",
+    "fernsehen": "television",
+    "streaming": "streaming",
+    "journalismus": "journalism",
+    # Industrie
+    "industrie": "industry",
+    "fabrik": "factory",
+    "produktion": "production",
+    "automobil": "automotive",
+    "stahl": "steel",
+    # Energie
+    "energie": "energy",
+    "strom": "electricity",
+    "kernkraft": "nuclear energy",
+    "kohle": "coal",
+    "energiewende": "energy transition",
+    # Wissenschaft
+    "forschung": "research",
+    "wissenschaft": "science",
+    "weltraum": "space",
+    "raumfahrt": "space travel",
+    # Finanzen
+    "bank": "bank",
+    "kredit": "credit",
+    "immobilien": "real estate",
+    "versicherung": "insurance",
+    "anleihe": "bond",
+    # Verkehr / Transport
+    "flugzeug": "aircraft",
+    "airline": "airline",
+    "flughafen": "airport",
+    "eisenbahn": "railway",
+    "schifffahrt": "shipping",
+    # Recht
+    "gericht": "court",
+    "urteil": "ruling",
+    "klage": "lawsuit",
+    "gesetz": "law",
+    "verfassung": "constitution",
+    # Soziales
+    "migration": "migration",
+    "asyl": "asylum",
+    "flüchtling": "refugee",
+    "armut": "poverty",
+    "wohnen": "housing",
+    "rente": "pension",
+    # Länder / Regionen
+    "italien": "Italy",
+    "spanien": "Spain",
+    "russland": "Russia",
+    "china": "China",
+    "japan": "Japan",
+    "usa": "United States",
+    "grossbritannien": "United Kingdom",
+    "england": "England",
+    "kanada": "Canada",
+    "australien": "Australia",
+    "europa": "Europe",
+    "asien": "Asia",
+    "naher osten": "Middle East",
+    # Allgemein
+    "zukunft": "future",
+    "prognose": "forecast",
+    "entwicklung": "development",
+    "veränderung": "change",
+    "krise": "crisis",
+    "wachstum": "growth",
+    "rückgang": "decline",
+    "nächste": "next",  # keep as hint
 }
 
 
@@ -761,6 +1050,33 @@ def _query_plan_fallback(question_text: str) -> List[str]:
     if kind == "sports":
         base = kw_str or question_text[:40]
         return [_with_year(base), f"{base} results", f"{base} championship"]
+    if kind == "culture":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} festival award", f"{base} news"]
+    if kind == "media":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters", f"{base} industry news"]
+    if kind == "industry":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters", _with_year(f"{kw_short} production forecast")]
+    if kind == "energy":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} IEA Reuters", _with_year(f"{kw_short} price forecast")]
+    if kind == "science":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} NASA ESA research", f"{base} breakthrough"]
+    if kind == "finance":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters Bloomberg", _with_year(f"{kw_short} forecast")]
+    if kind == "transport":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} Reuters", f"{base} ICAO IATA"]
+    if kind == "law":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} court ruling", f"{base} Reuters law"]
+    if kind == "social":
+        base = kw_str or question_text[:40]
+        return [_with_year(base), f"{base} UN UNHCR Reuters", _with_year(f"{kw_short} policy")]
     if kind == "education":
         base = kw_str or question_text[:40]
         return [
@@ -770,8 +1086,16 @@ def _query_plan_fallback(question_text: str) -> List[str]:
             f"{kw_short} Lehrplan Bildungsreform",
         ]
 
-    base = kw_str if kw_str else question_text[:50]
-    return [_with_year(base), f"{base} Reuters", f"{kw_short} news" if kw_short else base]
+    # General fallback: use both extracted keywords AND full question text
+    base = kw_str if kw_str else question_text[:60]
+    raw_q = question_text.strip().rstrip("?").strip()[:80]
+    queries = [_with_year(base)]
+    if base != raw_q:
+        queries.append(raw_q)
+    queries.append(f"{base} Reuters")
+    if kw_short:
+        queries.append(f"{kw_short} news forecast")
+    return queries
 
 
 def _query_plan(question_text: str) -> List[str]:
@@ -795,8 +1119,8 @@ def _fetch_url(url: str) -> bytes:
         return response.read()
 
 
-def _google_news_search(query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
-    params = {"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"}
+def _google_news_search(query: str, *, limit: int = 15, hl: str = "en-US", gl: str = "US", ceid: str = "US:en") -> List[Dict[str, Any]]:
+    params = {"q": query, "hl": hl, "gl": gl, "ceid": ceid}
     url = f"{GOOGLE_NEWS_RSS}?{urllib.parse.urlencode(params)}"
 
     try:
@@ -978,9 +1302,27 @@ def _dedupe_sources(sources: List[ResearchSource]) -> List[ResearchSource]:
 
 def _fetch_candidates(question_text: str) -> List[ResearchSource]:
     normalized: List[ResearchSource] = []
+    lang = _detect_language(question_text)
+    lang_params = _LANG_NEWS_PARAMS.get(lang, _LANG_NEWS_PARAMS["en"])
+    en_params = _LANG_NEWS_PARAMS["en"]
 
     for query in _query_plan(question_text):
-        for item in _google_news_search(query, limit=10):
+        # English search always
+        for item in _google_news_search(query, limit=15, **en_params):
+            source = _normalize_candidate(question_text, item)
+            if source is not None:
+                normalized.append(source)
+        # Native-language search if not English
+        if lang != "en":
+            for item in _google_news_search(query, limit=15, **lang_params):
+                source = _normalize_candidate(question_text, item)
+                if source is not None:
+                    normalized.append(source)
+
+    # Also search with the raw question text in native language for better coverage
+    raw_query = question_text.strip().rstrip("?").strip()[:120]
+    if raw_query:
+        for item in _google_news_search(raw_query, limit=10, **lang_params):
             source = _normalize_candidate(question_text, item)
             if source is not None:
                 normalized.append(source)
