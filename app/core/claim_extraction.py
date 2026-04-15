@@ -354,7 +354,9 @@ def _claim_confidence(
         "wire": 0.06,
         "research": 0.05,
         "major_media": 0.03,
+        "national_media": 0.02,
         "other": 0.0,
+        "alternative": -0.05,
     }.get(source_type, 0.0)
 
     claim_type_bonus = {

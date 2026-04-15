@@ -30,6 +30,43 @@ AGGREGATOR_PUBLISHER_PATTERNS = ("msn", "yahoo", "aol", "newsbreak", "flipboard"
 RESEARCH_PUBLISHER_PATTERNS = (
     "council on foreign relations", "brookings", "carnegie", "rand", "chatham house",
     "international crisis group", "csis", "bruegel", "ecfr", "cfr",
+    "ifo", "diw berlin", "bertelsmann", "swp berlin", "dgap", "snf", "nber",
+    "imf.org", "worldbank.org", "piie.com", "wilsoncenter",
+)
+
+# Nationale & regionale Medien (mittlere Glaubwürdigkeit)
+NATIONAL_MEDIA_PUBLISHER_PATTERNS = (
+    # DE/AT/CH
+    "spiegel", "zeit.de", "faz.net", "sueddeutsche", "welt.de", "handelsblatt",
+    "tagesspiegel", "focus.de", "stern.de", "nzz.ch", "tagesanzeiger", "blick.ch",
+    "orf.at", "derstandard.at", "diepresse.com", "kurier.at",
+    # FR
+    "lemonde.fr", "lefigaro.fr", "liberation.fr", "franceinfo.fr", "lexpress.fr",
+    "letemps.ch", "rts.ch", "rtbf.be",
+    # IT
+    "corriere.it", "repubblica.it", "lastampa.it", "ansa.it", "ilsole24ore.com",
+    # ES/PT
+    "elpais.com", "elmundo.es", "lavanguardia.com", "efe.com", "publico.pt",
+    # PL/CZ/HU/RO
+    "polsatnews.pl", "tvn24.pl", "novinky.cz", "index.hu", "digi24.ro",
+    # UK/IE/AU/CA
+    "independent.co.uk", "telegraph.co.uk", "mirror.co.uk", "thescotsman.com",
+    "irishtimes.com", "rte.ie", "abc.net.au", "smh.com.au", "globeandmail.com", "torontostar.com",
+    # ASIA/AFRICA/LATAM
+    "nikkei.com", "scmp.com", "timesofindia.com", "thehindu.com",
+    "dailynation.co.ke", "allafrica.com", "infobae.com", "eltiempo.com",
+    # NORDICS/OTHERS
+    "svt.se", "svd.se", "yle.fi", "nrk.no", "dr.dk", "bnn.gr",
+)
+
+# Alternative & weniger zuverlässige Quellen (geringe Glaubwürdigkeit)
+ALTERNATIVE_PUBLISHER_PATTERNS = (
+    "rt.com", "sputniknews", "sputnik", "tass.ru", "xinhua",
+    "zerohedge", "breitbart", "epochtimes", "theepochtimes",
+    "naturalnews", "globalresearch.ca", "infowars", "dailywire",
+    "oann", "newsmax", "thegrayzone", "mintpressnews",
+    "strategic-culture", "unz.com", "activistpost", "theduran",
+    "southfront.org", "veteranstoday", "21stcenturywire",
 )
 
 # ---------------------------------------------------------------------------
@@ -168,30 +205,72 @@ MIN_RELEVANCE_BY_KIND: Dict[str, float] = {
     "general": 0.05,
 }
 
-# Offizielle Quellen nur für geopolitische Fragen
-GEOPOLITICAL_OFFICIAL_SOURCES = (
-    {
-        "title": "NATO news",
-        "url": "https://www.nato.int/cps/en/natohq/news.htm",
-        "publisher": "NATO",
-        "source_type": "official",
-        "summary": "NATO news",
-    },
-    {
-        "title": "UN News",
-        "url": "https://news.un.org/en/",
-        "publisher": "United Nations",
-        "source_type": "official",
-        "summary": "UN News",
-    },
-    {
-        "title": "U.S. State Department News",
-        "url": "https://www.state.gov/news/",
-        "publisher": "U.S. State Department",
-        "source_type": "official",
-        "summary": "U.S. State Department News",
-    },
-)
+# Offizieller Quellen-Katalog nach Thema
+# "universal" = wird für alle Themen eingebunden
+OFFICIAL_SOURCES_CATALOG: Dict[str, List[Dict[str, str]]] = {
+    "universal": [
+        {"title": "UN News", "url": "https://news.un.org/en/", "publisher": "United Nations", "summary": "UN News"},
+        {"title": "OECD News", "url": "https://www.oecd.org/newsroom/", "publisher": "OECD", "summary": "OECD official news and data"},
+        {"title": "World Bank Blogs", "url": "https://blogs.worldbank.org/", "publisher": "World Bank", "summary": "World Bank research and analysis"},
+        {"title": "IMF News", "url": "https://www.imf.org/en/News", "publisher": "IMF", "summary": "IMF press releases and statements"},
+    ],
+    "war": [
+        {"title": "NATO News", "url": "https://www.nato.int/cps/en/natohq/news.htm", "publisher": "NATO", "summary": "NATO official news"},
+        {"title": "U.S. State Department", "url": "https://www.state.gov/news/", "publisher": "U.S. State Department", "summary": "U.S. foreign policy news"},
+        {"title": "EU External Action", "url": "https://www.eeas.europa.eu/eeas/news_en", "publisher": "EU External Action Service", "summary": "EU foreign policy and security news"},
+        {"title": "ICRC News", "url": "https://www.icrc.org/en/news", "publisher": "ICRC", "summary": "International Committee of the Red Cross news"},
+    ],
+    "world_war": [
+        {"title": "NATO News", "url": "https://www.nato.int/cps/en/natohq/news.htm", "publisher": "NATO", "summary": "NATO official news"},
+        {"title": "U.S. State Department", "url": "https://www.state.gov/news/", "publisher": "U.S. State Department", "summary": "U.S. foreign policy news"},
+        {"title": "UN Security Council", "url": "https://www.un.org/securitycouncil/", "publisher": "UN Security Council", "summary": "UN Security Council resolutions and news"},
+        {"title": "OSCE News", "url": "https://www.osce.org/news", "publisher": "OSCE", "summary": "OSCE security news"},
+    ],
+    "economics": [
+        {"title": "Eurostat", "url": "https://ec.europa.eu/eurostat/news/", "publisher": "Eurostat", "summary": "EU statistical office, economic data"},
+        {"title": "Federal Reserve", "url": "https://www.federalreserve.gov/newsevents.htm", "publisher": "Federal Reserve", "summary": "U.S. central bank news"},
+        {"title": "ECB Press", "url": "https://www.ecb.europa.eu/press/html/index.en.html", "publisher": "European Central Bank", "summary": "ECB monetary policy and press releases"},
+        {"title": "Destatis", "url": "https://www.destatis.de/EN/Press/", "publisher": "Statistisches Bundesamt", "summary": "German Federal Statistical Office"},
+        {"title": "BFS Medienmitteilungen", "url": "https://www.bfs.admin.ch/bfs/de/home/aktuell/neue-veroeffentlichungen.html", "publisher": "BFS", "summary": "Swiss Federal Statistical Office"},
+        {"title": "ONS UK Statistics", "url": "https://www.ons.gov.uk/news/news", "publisher": "Office for National Statistics UK", "summary": "UK national statistics"},
+        {"title": "WTO News", "url": "https://www.wto.org/english/news_e/news_e.htm", "publisher": "WTO", "summary": "World Trade Organization news"},
+    ],
+    "politics": [
+        {"title": "European Commission News", "url": "https://ec.europa.eu/commission/presscorner/", "publisher": "European Commission", "summary": "EU Commission press releases"},
+        {"title": "Bundesregierung", "url": "https://www.bundesregierung.de/breg-en/news", "publisher": "Bundesregierung", "summary": "German federal government news"},
+        {"title": "Conseil fédéral suisse", "url": "https://www.admin.ch/gov/en/start/documentation/media-releases.html", "publisher": "Schweizer Bundesrat", "summary": "Swiss Federal Council press releases"},
+        {"title": "UK Government News", "url": "https://www.gov.uk/search/news-and-communications", "publisher": "UK Government", "summary": "Official UK government news"},
+        {"title": "Élysée Actualités", "url": "https://www.elysee.fr/en/news", "publisher": "Élysée", "summary": "French presidency news"},
+        {"title": "White House Briefings", "url": "https://www.whitehouse.gov/briefing-room/", "publisher": "White House", "summary": "White House press briefings"},
+        {"title": "Kremlin News", "url": "http://en.kremlin.ru/events/president/news", "publisher": "Kremlin", "summary": "Russian presidency news"},
+        {"title": "MFA China", "url": "https://www.mfa.gov.cn/eng/", "publisher": "MFA China", "summary": "Chinese Ministry of Foreign Affairs"},
+    ],
+    "health": [
+        {"title": "WHO News", "url": "https://www.who.int/news", "publisher": "WHO", "summary": "World Health Organization news"},
+        {"title": "ECDC News", "url": "https://www.ecdc.europa.eu/en/news-events", "publisher": "ECDC", "summary": "European Centre for Disease Prevention and Control"},
+        {"title": "CDC Newsroom", "url": "https://www.cdc.gov/media/index.html", "publisher": "CDC", "summary": "U.S. Centers for Disease Control and Prevention"},
+        {"title": "BAG Schweiz", "url": "https://www.bag.admin.ch/bag/de/home/das-bag/aktuell/medienmitteilungen.html", "publisher": "BAG", "summary": "Bundesamt für Gesundheit Schweiz"},
+        {"title": "RKI Meldungen", "url": "https://www.rki.de/DE/Content/Service/Presse/presse_node.html", "publisher": "RKI", "summary": "Robert Koch Institut Pressemitteilungen"},
+    ],
+    "climate": [
+        {"title": "UNEP News", "url": "https://www.unep.org/news-and-stories/", "publisher": "UNEP", "summary": "UN Environment Programme news"},
+        {"title": "IPCC Press", "url": "https://www.ipcc.ch/news-and-events/", "publisher": "IPCC", "summary": "Intergovernmental Panel on Climate Change"},
+        {"title": "Copernicus Climate", "url": "https://climate.copernicus.eu/news-and-events", "publisher": "Copernicus/ECMWF", "summary": "EU climate data service"},
+        {"title": "BAFU Schweiz", "url": "https://www.bafu.admin.ch/bafu/de/home/themen/klima/medienmitteilungen.html", "publisher": "BAFU", "summary": "Bundesamt für Umwelt Schweiz"},
+        {"title": "UBA Deutschland", "url": "https://www.umweltbundesamt.de/presse/pressemitteilungen", "publisher": "Umweltbundesamt", "summary": "German Environment Agency"},
+    ],
+    "technology": [
+        {"title": "ENISA News", "url": "https://www.enisa.europa.eu/news", "publisher": "ENISA", "summary": "EU Agency for Cybersecurity"},
+        {"title": "SECO Digitalisierung", "url": "https://www.seco.admin.ch/seco/de/home/seco/nsb-news.html", "publisher": "SECO", "summary": "Swiss State Secretariat for Economic Affairs"},
+    ],
+    "existence": [
+        {"title": "UN General Assembly", "url": "https://www.un.org/en/ga/", "publisher": "UN General Assembly", "summary": "UN General Assembly news and resolutions"},
+        {"title": "European Parliament", "url": "https://www.europarl.europa.eu/news/en/", "publisher": "European Parliament", "summary": "EU Parliament news"},
+    ],
+}
+
+# Rückwärtskompatibilität
+GEOPOLITICAL_OFFICIAL_SOURCES = OFFICIAL_SOURCES_CATALOG["war"]
 
 
 @dataclass
@@ -282,8 +361,45 @@ def _extract_domain(url: str) -> str:
         return ""
 
 
+_OFFICIAL_DOMAIN_SUFFIXES = (
+    ".gov", ".int", ".mil",
+    ".gov.uk", ".gov.au", ".gov.ca", ".gov.nz", ".gov.za", ".gov.in",
+    ".gob.es", ".gob.mx", ".gob.ar", ".gob.cl",
+    ".gouv.fr", ".gouvernement.fr",
+    ".gc.ca",
+    ".gv.at",
+)
+
+_OFFICIAL_DOMAIN_SUBSTRINGS = (
+    ".admin.ch", ".bund.de", "bundesregierung.de", "bundestag.de",
+    "bundesrat.de", "bundesbank.de", "bafin.de", "destatis.de",
+    "rki.de", "bka.de", "bsi.bund.de", "umweltbundesamt.de",
+    "elysee.fr", "senat.fr", "assemblee-nationale.fr",
+    "europarl.europa.eu", "ec.europa.eu", "eeas.europa.eu",
+    "ecb.europa.eu", "eurostat.ec.europa.eu",
+    "who.int", "un.org", "nato.int", "osce.org", "icrc.org",
+    "imf.org", "worldbank.org", "oecd.org", "wto.org",
+    "fed.us", "federalreserve.gov", "treasury.gov", "state.gov",
+    "whitehouse.gov", "cdc.gov", "fda.gov", "epa.gov",
+    "kremlin.ru", "mid.ru", "mfa.gov.cn", "gov.cn",
+    "bag.admin.ch", "bafu.admin.ch", "bfs.admin.ch", "seco.admin.ch",
+    "ons.gov.uk", "bankofengland.co.uk",
+    "statistik.at", "oesterreichischebundesbank.at",
+    "insee.fr", "banque-france.fr",
+    "istat.it", "bancaditalia.it",
+    "ine.es", "bde.es",
+    "statistics.gov.scot", "statssa.gov.za",
+    "abs.gov.au", "rba.gov.au",
+)
+
+
 def _publisher_type(publisher: str, domain: str) -> str:
     publisher_text = _lower(f"{publisher} {domain}")
+
+    # Alternative Quellen zuerst prüfen (explizite Liste hat Vorrang)
+    if any(p in publisher_text for p in ALTERNATIVE_PUBLISHER_PATTERNS):
+        return "alternative"
+
     if any(p in publisher_text for p in AGGREGATOR_PUBLISHER_PATTERNS):
         return "aggregator"
     if any(p in publisher_text for p in RESEARCH_PUBLISHER_PATTERNS):
@@ -292,8 +408,17 @@ def _publisher_type(publisher: str, domain: str) -> str:
         return "wire"
     if any(p in publisher_text for p in MAJOR_MEDIA_PUBLISHER_PATTERNS):
         return "major_media"
-    if domain.endswith(".gov") or domain.endswith(".int"):
+
+    # Offizielle Domains: TLD-Suffix und bekannte Substrings
+    d = _lower(domain)
+    if any(d.endswith(sfx) for sfx in _OFFICIAL_DOMAIN_SUFFIXES):
         return "official"
+    if any(sub in d for sub in _OFFICIAL_DOMAIN_SUBSTRINGS):
+        return "official"
+
+    if any(p in publisher_text for p in NATIONAL_MEDIA_PUBLISHER_PATTERNS):
+        return "national_media"
+
     return "other"
 
 
@@ -400,8 +525,10 @@ def _signal_strength(question_text: str, title: str, summary: str, source_type: 
         "wire": 0.30,
         "research": 0.28,
         "major_media": 0.24,
+        "national_media": 0.20,
         "other": 0.18,
         "aggregator": 0.05,
+        "alternative": 0.10,
     }.get(source_type, 0.15)
     return round(_clamp(base), 4)
 
@@ -415,8 +542,12 @@ def _credibility_score(source_type: str, publisher: str, domain: str) -> float:
         return 0.82
     if source_type == "major_media":
         return 0.84
+    if source_type == "national_media":
+        return 0.72
     if source_type == "aggregator":
         return 0.35
+    if source_type == "alternative":
+        return 0.28
     return 0.60
 
 
@@ -430,7 +561,9 @@ def _overall_score(
 ) -> float:
     type_penalty = {
         "aggregator": -0.20,
+        "alternative": -0.15,
         "other": 0.0,
+        "national_media": 0.01,
         "major_media": 0.02,
         "research": 0.02,
         "wire": 0.05,
@@ -626,14 +759,30 @@ def _google_news_search(query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _source_from_official_catalog(question_text: str) -> List[ResearchSource]:
-    """Offizielle Quellen nur für geopolitische Fragen einbinden."""
+    """Offizielle Quellen für alle Themen einbinden (universal + themenspezifisch)."""
     kind = _question_kind(question_text)
-    if not _is_geopolitical(kind):
-        return []
+
+    catalog_entries = list(OFFICIAL_SOURCES_CATALOG.get("universal", []))
+    catalog_entries += OFFICIAL_SOURCES_CATALOG.get(kind, [])
+
+    # Duplikate nach URL entfernen
+    seen_urls: set = set()
+    unique_entries = []
+    for entry in catalog_entries:
+        u = entry["url"]
+        if u not in seen_urls:
+            seen_urls.add(u)
+            unique_entries.append(entry)
 
     results: List[ResearchSource] = []
-    for item in GEOPOLITICAL_OFFICIAL_SOURCES:
-        relevance = 0.08 if kind == "world_war" else 0.10
+    for item in unique_entries:
+        # Themenspezifische Relevanz: universal-Quellen etwas niedriger
+        if item in OFFICIAL_SOURCES_CATALOG.get("universal", []):
+            relevance = 0.06
+        elif kind == "world_war":
+            relevance = 0.08
+        else:
+            relevance = 0.12
         freshness = 0.45
         credibility = 0.98
         signal = 0.10
@@ -679,10 +828,15 @@ def _normalize_candidate(question_text: str, item: Dict[str, Any]) -> Optional[R
     source_type = _publisher_type(publisher, domain)
     if source_type == "aggregator":
         return None
+    # Alternative Quellen: niedrigere Mindest-Relevanz, aber trotzdem einbinden
+    alternative_mode = source_type == "alternative"
 
     relevance = _question_specific_relevance(question_text, title, summary)
     kind = _question_kind(question_text)
     min_rel = MIN_RELEVANCE_BY_KIND.get(kind, 0.05)
+    # Alternative Quellen erhalten halbierte Mindest-Relevanz
+    if alternative_mode:
+        min_rel = min_rel * 0.5
 
     if relevance < min_rel:
         return None
