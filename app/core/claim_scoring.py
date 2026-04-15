@@ -77,21 +77,26 @@ def _independence_weight(claim: Dict[str, Any], claims: List[Dict[str, Any]]) ->
 def _specificity_weight(claim_text: str) -> float:
     text = _normalize_text(claim_text)
     if not text:
-        return 0.4
+        return 0.35
 
-    score = 0.45
+    score = 0.40
     text_lower = text.lower()
 
-    if len(text) >= 50:
-        score += 0.10
+    if len(text) >= 80:
+        score += 0.12
+    elif len(text) >= 50:
+        score += 0.07
     if re.search(r"\b\d{4}\b", text):
         score += 0.08
     if re.search(r"\b\d+(\.\d+)?%?\b", text):
-        score += 0.06
+        score += 0.08
     if any(token in text_lower for token in ["according to", "reported", "confirmed", "announced", "stated"]):
-        score += 0.06
+        score += 0.07
     if any(token in text_lower for token in ["official", "commission", "government", "ministry", "nato", "un", "eu"]):
-        score += 0.05
+        score += 0.06
+    # Penalty für vage Formulierungen ohne Substanz
+    if any(token in text_lower for token in ["could", "might", "possibly", "perhaps", "könnte", "möglicherweise"]):
+        score -= 0.05
 
     return round(_clamp(score), 4)
 
@@ -107,12 +112,12 @@ def _compute_final_weight(claim: Dict[str, Any], claims: List[Dict[str, Any]]) -
     specificity_weight = _specificity_weight(str(claim.get("claim_text", "")))
 
     final_weight = (
-        source_quality * 0.22
-        + claim_confidence * 0.24
+        source_quality * 0.20
+        + claim_confidence * 0.30
         + time_relevance * 0.14
         + relevance_weight * 0.14
-        + freshness_weight * 0.10
-        + independence_weight * 0.10
+        + freshness_weight * 0.08
+        + independence_weight * 0.08
         + specificity_weight * 0.06
     )
 
@@ -271,6 +276,16 @@ def score_claims(
 
     raw_net = pro_weight_sum - contra_weight_sum
     uncertainty_drag = min(0.35, uncertainty_weight_sum * 0.10)
+
+    # Directional-Imbalance-Bonus: wenn >65% des gerichteten Gewichts auf einer Seite liegen,
+    # wird das Nettosignal um bis zu 20% verstärkt — damit klare Evidenz nicht zur Mitte gezogen wird
+    directional_total = pro_weight_sum + contra_weight_sum
+    if directional_total > 1e-6:
+        imbalance_ratio = abs(raw_net) / directional_total  # 0.0 (gleichgewichtig) bis 1.0 (einseitig)
+        if imbalance_ratio > 0.65:
+            imbalance_bonus = (imbalance_ratio - 0.65) / 0.35 * 0.20  # 0 bis 0.20
+            raw_net = raw_net * (1.0 + imbalance_bonus)
+
     net_signal = round(raw_net * (1.0 - uncertainty_drag), 4)
 
     diagnostics = {

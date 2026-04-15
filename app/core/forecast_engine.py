@@ -126,7 +126,7 @@ def _unwrap_claims_payload(result: Any) -> list[Any]:
     if isinstance(result, tuple):
         return list(result)
     if isinstance(result, dict):
-        for key in ("claims", "items", "results", "data"):
+        for key in ("scored_claims", "claims", "items", "results", "data"):
             value = result.get(key)
             if isinstance(value, list):
                 return value
@@ -520,7 +520,20 @@ def _compute_probability_from_claims(
             uncertain_weight_sum += final_weight
 
     net_signal = pro_weight_sum - contra_weight_sum
-    evidence_strength = net_signal / max(1.0, len(claims) * 0.60)
+    directional_weight = pro_weight_sum + contra_weight_sum
+
+    if directional_weight > 1e-6:
+        # directional_ratio: 1.0 = vollständig einseitig, 0.0 = exakt ausgewogen
+        directional_ratio = abs(net_signal) / directional_weight
+        # Gesamtgewicht auf 4.0 begrenzen, damit extreme Ausreißer nicht dominieren
+        weight_magnitude = min(directional_weight, 4.0)
+        evidence_strength = math.copysign(directional_ratio * weight_magnitude * 0.75, net_signal)
+    else:
+        evidence_strength = 0.0
+
+    # Unsicherheitsstrafe: zieht zur Mitte wenn kaum direktionale Evidenz vorhanden
+    if directional_weight < 0.5 and uncertain_weight_sum > 0:
+        evidence_strength -= uncertain_weight_sum * 0.05
 
     prior_logit = math.log(max(1e-6, prior) / max(1e-6, 1.0 - prior))
     combined_logit = prior_logit + evidence_strength
@@ -533,8 +546,10 @@ def _compute_probability_from_claims(
         "contra_weight_sum": round(contra_weight_sum, 6),
         "uncertain_weight_sum": round(uncertain_weight_sum, 6),
         "net_signal": round(net_signal, 6),
+        "directional_weight": round(directional_weight, 6),
+        "directional_ratio": round(abs(net_signal) / directional_weight if directional_weight > 1e-6 else 0.0, 6),
         "evidence_strength": round(evidence_strength, 6),
-        "method": "weighted_claim_signal",
+        "method": "ratio_amplified_signal",
     }
     return probability, diagnostics
 
@@ -948,6 +963,16 @@ class ForecastEngine:
         question_description = _question_description(question)
         category = category or _question_category(question)
 
+        # LLM-Basisrate als Prior: ersetzt festes 0.50 durch historisch kalibrierte Häufigkeit
+        prior_probability = self.config.prior_probability
+        base_rate_reference_class = None
+        try:
+            from app.core.llm_service import estimate_base_rate as _estimate_base_rate
+            prior_probability = _estimate_base_rate(question_text)
+            base_rate_reference_class = f"LLM-estimated base rate: {round(prior_probability * 100, 1)}%"
+        except Exception:
+            pass
+
         sources = _call_research_sources(
             question_text=question_text,
             question_description=question_description,
@@ -962,8 +987,10 @@ class ForecastEngine:
 
         raw_probability, probability_diagnostics = _compute_probability_from_claims(
             claims,
-            prior_probability=self.config.prior_probability,
+            prior_probability=prior_probability,
         )
+        if base_rate_reference_class:
+            probability_diagnostics["base_rate_source"] = base_rate_reference_class
 
         runtime_calibration_meta = _get_runtime_calibration_payload(session=session, category=category)
         calibrated_probability, calibration_signals = _apply_runtime_calibration_payload(

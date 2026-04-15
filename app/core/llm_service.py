@@ -37,6 +37,12 @@ For each relevant passage classify it as:
 Return ONLY valid JSON in this exact shape:
 {"claims": [{"claim_text": "...", "claim_type": "pro|contra|uncertainty|background", "claim_confidence": 0.0-1.0}]}
 
+claim_confidence guidance (avoid 0.5 — be decisive):
+- 0.80–0.95: strong factual claim with official source, confirmed numbers, or direct quotes
+- 0.65–0.79: moderate evidence, credible reporting, likely accurate
+- 0.40–0.64: weak signal, speculation, or indirect inference
+- Use 0.30 or below for very weak/contradicted claims
+
 Skip background claims. Keep claim_text concise (max 200 chars)."""
 
 _EXPLANATION_SYSTEM_TEMPLATE = """\
@@ -311,6 +317,64 @@ Antworte als JSON."""
     except Exception as exc:
         log.error("generate_direct_answer fehlgeschlagen: %s", exc, exc_info=True)
         return {}
+
+
+def estimate_base_rate(question_text: str) -> float:
+    """
+    Schätzt die historische Basisrate (Prior) für eine Prognosefrage via Gemini.
+    Gibt 0.50 zurück wenn kein API-Key oder Fehler.
+
+    Die Basisrate ist unabhängig von aktuellen Quellen — sie basiert auf
+    historischen Häufigkeiten ähnlicher Ereignisse (z.B. Wahl von Amtsinhabern,
+    Zinsentscheide, Militärkonflikte, Sportergebnisse).
+    """
+    client = _get_client()
+    if client is None:
+        return 0.50
+
+    system = """\
+You are a superforecaster calibration expert. For the given forecasting question, estimate the base rate probability — the historical frequency at which similar events occur, BEFORE looking at any current evidence.
+
+Think about:
+- The domain (politics, economics, sports, science, conflict, etc.)
+- How often similar events have occurred historically
+- Whether this is a status-quo vs. change question
+- Known reference class frequencies
+
+Base rate guidelines:
+- Incumbent re-election / status quo continuation: 0.55–0.75
+- Central bank rate changes in a given quarter: 0.30–0.55
+- Sports favorites winning a championship: 0.25–0.50
+- Major geopolitical escalation / war start: 0.05–0.20
+- Catastrophic/existential events (nuclear war, etc.): 0.01–0.05
+- Common policy reversals under political pressure: 0.25–0.45
+- Court rulings against government: 0.20–0.40
+- When genuinely uncertain and no reference class applies: 0.50
+
+Return ONLY valid JSON: {"base_rate": 0.XX, "reference_class": "one sentence"}"""
+
+    user_message = f'Forecasting question: "{question_text}"\n\nEstimate the base rate prior probability.'
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                max_output_tokens=128,
+            ),
+        )
+        data = _parse_json_response(response.text or "")
+        base_rate = data.get("base_rate")
+        if base_rate is not None:
+            value = float(base_rate)
+            # Clamp to sensible range — never let the prior be too extreme
+            return max(0.05, min(0.90, value))
+    except Exception as exc:
+        log.error("estimate_base_rate fehlgeschlagen: %s", exc)
+
+    return 0.50
 
 
 def generate_forecast_explanation(
