@@ -698,7 +698,18 @@ def _question_answer_phrase(question_text: str, bucket: str) -> str:
 
 
 _OPEN_QUESTION_RE = re.compile(
-    r"^(was|wer|wann|wo|wie|warum|welche[rs]?|wieviel|wie\s+viel|womit|wozu|wohin|wof[üu]r|wor[üu]ber|inwiefern|inwieweit)\b",
+    r"^("
+    # DE
+    r"was|wer|wann|wo|wie|warum|welche[rs]?|wieviel|wie\s+viel|womit|wozu|wohin|wof[üu]r|wor[üu]ber|inwiefern|inwieweit"
+    # EN
+    r"|what|who|when|where|how|why|which|how\s+much|how\s+many|how\s+long|how\s+often"
+    # FR
+    r"|que[l]?|qui|quand|où|comment|pourquoi|combien|quel(?:le)?s?"
+    # IT
+    r"|cosa|chi|quando|dove|come|perché|quanto|quale|quali"
+    # ES (mit und ohne Akzent, da viele Nutzer ohne tippen)
+    r"|qué|que\b|quién|quien|cuándo|cuando|dónde|donde|cómo|como|por\s+qué|cuánto|cuanto|cuál|cual|cuáles|cuales"
+    r")\b",
     re.IGNORECASE,
 )
 

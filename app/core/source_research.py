@@ -10,6 +10,7 @@ import re
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
@@ -1301,31 +1302,44 @@ def _dedupe_sources(sources: List[ResearchSource]) -> List[ResearchSource]:
 
 
 def _fetch_candidates(question_text: str) -> List[ResearchSource]:
-    normalized: List[ResearchSource] = []
+    """Sucht in ALLEN verfügbaren Sprachen parallel für maximale Abdeckung."""
+    queries = _query_plan(question_text)
     lang = _detect_language(question_text)
-    lang_params = _LANG_NEWS_PARAMS.get(lang, _LANG_NEWS_PARAMS["en"])
-    en_params = _LANG_NEWS_PARAMS["en"]
+    native_params = _LANG_NEWS_PARAMS.get(lang, _LANG_NEWS_PARAMS["en"])
 
-    for query in _query_plan(question_text):
-        # English search always
-        for item in _google_news_search(query, limit=15, **en_params):
-            source = _normalize_candidate(question_text, item)
-            if source is not None:
-                normalized.append(source)
-        # Native-language search if not English
-        if lang != "en":
-            for item in _google_news_search(query, limit=15, **lang_params):
-                source = _normalize_candidate(question_text, item)
-                if source is not None:
-                    normalized.append(source)
+    # Alle (query, lang_params)-Paare aufbauen — jede Query in jeder Sprache
+    search_tasks: List[tuple] = []
+    for query in queries:
+        for lang_params in _LANG_NEWS_PARAMS.values():
+            search_tasks.append((query, lang_params, 8))
 
-    # Also search with the raw question text in native language for better coverage
+    # Rohe Frage zusätzlich in Muttersprache suchen
     raw_query = question_text.strip().rstrip("?").strip()[:120]
     if raw_query:
-        for item in _google_news_search(raw_query, limit=10, **lang_params):
-            source = _normalize_candidate(question_text, item)
-            if source is not None:
-                normalized.append(source)
+        search_tasks.append((raw_query, native_params, 10))
+
+    def _search(args: tuple) -> List[Dict[str, Any]]:
+        query, params, limit = args
+        try:
+            return _google_news_search(query, limit=limit, **params)
+        except Exception:
+            return []
+
+    raw_items: List[Dict[str, Any]] = []
+    # Parallel ausführen mit max. 12 gleichzeitigen Requests
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        futures = [executor.submit(_search, task) for task in search_tasks]
+        for future in as_completed(futures, timeout=REQUEST_TIMEOUT + 5):
+            try:
+                raw_items.extend(future.result())
+            except Exception:
+                pass
+
+    normalized: List[ResearchSource] = []
+    for item in raw_items:
+        source = _normalize_candidate(question_text, item)
+        if source is not None:
+            normalized.append(source)
 
     normalized.extend(_source_from_official_catalog(question_text))
     return _dedupe_sources(normalized)
