@@ -114,6 +114,14 @@ _KIND_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
         "climate", "klima", "temperature", "emission", "co2", "fossil", "renewable",
         "solar", "wind energy", "glacier", "sea level", "carbon",
     )),
+    ("education", (
+        "schulreform", "bildungsreform", "lehrplan", "schule", "bildung", "hochschule",
+        "universität", "pisa", "harmos", "bildungssystem", "schulpflicht", "gymnasium",
+        "berufsbildung", "lehre", "lehrperson", "unterricht", "bildungspolitik",
+        "school reform", "education reform", "curriculum", "school system", "university",
+        "higher education", "vocational training", "education policy", "pedagogy",
+        "teaching", "learning", "literacy", "edk", "sbfi", "skbf",
+    )),
 ]
 
 
@@ -191,6 +199,12 @@ _STANCE_SIGNALS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...]]] = {
         ("offensive", "invasion", "attack", "airstrikes", "casualties", "escalation"),
         ("ceasefire", "peace talks", "withdrawal", "agreement", "truce", "mediation"),
     ),
+    "education": (
+        ("reform", "new curriculum", "overhaul", "restructure", "initiative", "pilot",
+         "harmos", "new law", "bildungsreform", "lehrplanrevision", "neue schule"),
+        ("no reform", "stalled", "blocked", "rejected", "failed", "cancelled",
+         "keine reform", "gescheitert", "abgelehnt"),
+    ),
 }
 
 MIN_RELEVANCE_BY_KIND: Dict[str, float] = {
@@ -202,6 +216,7 @@ MIN_RELEVANCE_BY_KIND: Dict[str, float] = {
     "health": 0.06,
     "sports": 0.06,
     "climate": 0.06,
+    "education": 0.05,
     "general": 0.05,
 }
 
@@ -262,6 +277,15 @@ OFFICIAL_SOURCES_CATALOG: Dict[str, List[Dict[str, str]]] = {
     "technology": [
         {"title": "ENISA News", "url": "https://www.enisa.europa.eu/news", "publisher": "ENISA", "summary": "EU Agency for Cybersecurity"},
         {"title": "SECO Digitalisierung", "url": "https://www.seco.admin.ch/seco/de/home/seco/nsb-news.html", "publisher": "SECO", "summary": "Swiss State Secretariat for Economic Affairs"},
+    ],
+    "education": [
+        {"title": "EDK Medienmitteilungen", "url": "https://www.edk.ch/de/aktuell/medienmitteilungen", "publisher": "EDK", "summary": "Schweizerische Konferenz der kantonalen Erziehungsdirektoren"},
+        {"title": "SBFI News", "url": "https://www.sbfi.admin.ch/sbfi/de/home/aktuell/medienmitteilungen.html", "publisher": "SBFI", "summary": "Staatssekretariat für Bildung, Forschung und Innovation Schweiz"},
+        {"title": "SKBF Bildungsbericht", "url": "https://www.skbf-csre.ch/bildungsbericht/", "publisher": "SKBF", "summary": "Swiss Coordination Centre for Research in Education"},
+        {"title": "KMK Pressemitteilungen", "url": "https://www.kmk.org/presse/pressemitteilungen.html", "publisher": "KMK", "summary": "Kultusministerkonferenz Deutschland"},
+        {"title": "BMBF Nachrichten", "url": "https://www.bmbf.de/bmbf/de/home/presse/pressemitteilungen.html", "publisher": "BMBF", "summary": "Bundesministerium für Bildung und Forschung Deutschland"},
+        {"title": "UNESCO Education", "url": "https://www.unesco.org/en/education/news", "publisher": "UNESCO", "summary": "UNESCO education news and policy"},
+        {"title": "PISA OECD", "url": "https://www.oecd.org/pisa/", "publisher": "OECD PISA", "summary": "PISA international education assessment"},
     ],
     "existence": [
         {"title": "UN General Assembly", "url": "https://www.un.org/en/ga/", "publisher": "UN General Assembly", "summary": "UN General Assembly news and resolutions"},
@@ -585,12 +609,27 @@ def _overall_score(
 # ---------------------------------------------------------------------------
 
 _DE_STOPWORDS = frozenset({
-    "wird", "besteht", "besteht die", "ist", "hat", "kann", "wird es", "gibt es",
-    "wann", "ob", "wird der", "wird die", "wird das", "bis", "noch", "fort",
-    "weiter", "weiterhin", "bis zum", "bis zur", "bis zu", "ab", "bleibt",
+    # Hilfsverben / Modalverben
+    "wird", "besteht", "ist", "hat", "kann", "haben", "sein", "werden",
+    "wurde", "waren", "wäre", "wären", "hätte", "hätten", "könnte", "könnten",
+    "sollte", "sollten", "dürfte", "dürften", "müsste", "müssten",
+    "gibt", "findet", "statt", "kommt", "geht",
+    # Fragewörter
+    "wann", "ob", "wie", "was", "wer", "wo", "wohin", "woher", "warum", "wieso",
+    # Artikel / Pronomen
     "der", "die", "das", "ein", "eine", "einem", "einer", "den", "dem",
+    "er", "sie", "es", "wir", "ihr", "sie", "sich", "man",
+    # Präpositionen / Konjunktionen
     "und", "oder", "aber", "als", "für", "von", "mit", "bei", "im", "in",
-    "an", "auf", "über", "unter", "durch", "nach", "vor", "es", "sich",
+    "an", "auf", "über", "unter", "durch", "nach", "vor", "bis", "ab",
+    "noch", "fort", "weiter", "weiterhin", "bis zum", "bis zur", "bis zu",
+    # Häufige Adjektive ohne Inhaltswert
+    "nächste", "nächsten", "nächster", "letzte", "letzten", "letzter",
+    "erste", "ersten", "erster", "neue", "neuen", "neuer", "große", "großen",
+    "kleine", "kleinen", "weitere", "weiteren",
+    # Sonstige
+    "besteht die", "wird es", "gibt es", "wird der", "wird die", "wird das",
+    "bleibt", "fort",
 })
 
 _DE_EN_MAP = {
@@ -613,6 +652,31 @@ _DE_EN_MAP = {
     "klimawandel": "climate change",
     "pandemie": "pandemic",
     "impfstoff": "vaccine",
+    # Bildung
+    "schulreform": "school reform",
+    "bildungsreform": "education reform",
+    "lehrplan": "curriculum",
+    "schule": "school",
+    "bildung": "education",
+    "hochschule": "university",
+    "universität": "university",
+    "bildungssystem": "education system",
+    "bildungspolitik": "education policy",
+    "berufsbildung": "vocational training",
+    "unterricht": "teaching",
+    # Allgemein nützlich
+    "schweiz": "Switzerland",
+    "deutschland": "Germany",
+    "österreich": "Austria",
+    "frankreich": "France",
+    "italien": "Italy",
+    "bundestag": "German parliament",
+    "nationalrat": "Swiss parliament",
+    "regierung": "government",
+    "reform": "reform",
+    "gesetz": "law",
+    "volksinitiative": "popular initiative Switzerland",
+    "referendum": "referendum",
 }
 
 
@@ -631,6 +695,10 @@ def _extract_keywords(question_text: str) -> List[str]:
         if translated:
             keywords.append(translated)
         elif w[0].isupper() and not re.match(r"^\d{4}$", w):
+            # Kapitalisiertes Wort (Eigenname, Substantiv)
+            keywords.append(w)
+        elif len(w) >= 6 and w_lower not in _DE_STOPWORDS:
+            # Längere Kleinbuchstaben-Wörter als Fallback (z.B. "schulreform" am Satzanfang)
             keywords.append(w)
 
     # Jahrzahl extrahieren falls vorhanden
@@ -693,6 +761,14 @@ def _query_plan_fallback(question_text: str) -> List[str]:
     if kind == "sports":
         base = kw_str or question_text[:40]
         return [_with_year(base), f"{base} results", f"{base} championship"]
+    if kind == "education":
+        base = kw_str or question_text[:40]
+        return [
+            _with_year(base),
+            f"{base} reform EDK SBFI",
+            f"{base} Bildungspolitik Schweiz" if "schweiz" in _lower(question_text) or "swiss" in _lower(question_text) else f"{base} education policy",
+            f"{kw_short} Lehrplan Bildungsreform",
+        ]
 
     base = kw_str if kw_str else question_text[:50]
     return [_with_year(base), f"{base} Reuters", f"{kw_short} news" if kw_short else base]
