@@ -6,6 +6,10 @@ from typing import Any, Iterable, Optional
 import math
 import re
 
+from app.core.logger import get_logger
+
+_log = get_logger("forecast_engine")
+
 
 try:
     from app.core.source_research import research_sources as _research_sources  # type: ignore
@@ -525,15 +529,16 @@ def _compute_probability_from_claims(
     if directional_weight > 1e-6:
         # directional_ratio: 1.0 = vollständig einseitig, 0.0 = exakt ausgewogen
         directional_ratio = abs(net_signal) / directional_weight
-        # Gesamtgewicht auf 4.0 begrenzen, damit extreme Ausreißer nicht dominieren
-        weight_magnitude = min(directional_weight, 4.0)
-        evidence_strength = math.copysign(directional_ratio * weight_magnitude * 0.75, net_signal)
+        # Cap auf 5.0 verhindert Dominanz einzelner starker Claims; Multiplikator 1.0
+        # statt 0.75 lässt klare Signale weiter von der 50%-Linie weg
+        weight_magnitude = min(directional_weight, 5.0)
+        evidence_strength = math.copysign(directional_ratio * weight_magnitude * 1.0, net_signal)
     else:
         evidence_strength = 0.0
 
-    # Unsicherheitsstrafe: zieht zur Mitte wenn kaum direktionale Evidenz vorhanden
-    if directional_weight < 0.5 and uncertain_weight_sum > 0:
-        evidence_strength -= uncertain_weight_sum * 0.05
+    # Unsicherheitsstrafe nur wenn wirklich gar keine direktionalen Signale vorhanden
+    if directional_weight < 0.3 and uncertain_weight_sum > 0:
+        evidence_strength -= uncertain_weight_sum * 0.03
 
     prior_logit = math.log(max(1e-6, prior) / max(1e-6, 1.0 - prior))
     combined_logit = prior_logit + evidence_strength
@@ -970,8 +975,9 @@ class ForecastEngine:
             from app.core.llm_service import estimate_base_rate as _estimate_base_rate
             prior_probability = _estimate_base_rate(question_text)
             base_rate_reference_class = f"LLM-estimated base rate: {round(prior_probability * 100, 1)}%"
-        except Exception:
-            pass
+            _log.info("base_rate_prior=%.3f question=%r", prior_probability, question_text[:80])
+        except Exception as exc:
+            _log.warning("estimate_base_rate fehlgeschlagen, fallback auf %.2f: %s", prior_probability, exc)
 
         sources = _call_research_sources(
             question_text=question_text,
