@@ -10,6 +10,15 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.3] – 2026-04-23
+
+### Behoben
+- Footer-Icons (GitHub, TWINT) wurden auf iOS (Safari, Chrome, Firefox, Vivaldi, Brave) nicht angezeigt
+  - GitHub: ungültiges `clipRule="evenodd"` auf normalem `<path>` entfernt – WebKit verwarf dadurch die gesamte Pfad-Darstellung
+  - TWINT: `fill="url(#id)"` SVG-Gradienten-Referenzen durch Festfarben (`#FF5500`, `#0292CD`) ersetzt – iOS WebKit löst Fragment-IDs in inline-SVGs als seitenrelative URLs auf, was in Next.js-Apps zum Renderingfehler führt
+
+---
+
 ## [1.0.2] – 2026-04-23
 
 ### Hinzugefügt
