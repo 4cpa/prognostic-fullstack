@@ -16,7 +16,7 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 - Twint-Spende-Button im Footer neben Ko-fi (persönlicher Zahlungslink)
 
 ### Geändert
-- Twint-Button: Gelb/Schwarz-Farbschema (`#FFCC00`/`#000`), T-Lettermark-Icon, `font-weight: 800`
+- Twint-Button: offizielles TWINT-Logo-SVG von twint.ch (schwarzes Rounded-Rect, weisser Schriftzug, Hexagon-Icon mit Orange/Blau-Verlauf), 63×24px inline-SVG
 - GitHub-Button: präzises Octocat-SVG (offizieller GitHub-Pfad)
 - Transivroom-Button: `whiteSpace: nowrap` und angepasstes Padding – Text wird nicht mehr abgeschnitten
 
