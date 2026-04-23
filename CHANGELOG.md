@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.4] – 2026-04-23
+
+### Behoben
+- @4-Logo erscheint in Safari iOS (Verlaufsliste, Lesezeichen) nicht: `app/apple-icon.png` entfernt, das Next.js veranlasste einen zweiten `apple-touch-icon`-Link mit wechselnder Hash-URL zu generieren, der Safaras Cache-Lookup verhinderte – stattdessen expliziter `<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />` im `<head>`
+
+---
+
 ## [1.0.3] – 2026-04-23
 
 ### Behoben
