@@ -13,7 +13,12 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 ## [1.0.2] – 2026-04-23
 
 ### Hinzugefügt
-- Twint-Spende-Button im Footer neben Ko-fi (`#0C2461`, Smartphone-Icon, persönlicher Zahlungslink)
+- Twint-Spende-Button im Footer neben Ko-fi (persönlicher Zahlungslink)
+
+### Geändert
+- Twint-Button: Gelb/Schwarz-Farbschema (`#FFCC00`/`#000`), T-Lettermark-Icon, `font-weight: 800`
+- GitHub-Button: präzises Octocat-SVG (offizieller GitHub-Pfad)
+- Transivroom-Button: `whiteSpace: nowrap` und angepasstes Padding – Text wird nicht mehr abgeschnitten
 
 ---
 
