@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.6] – 2026-04-23
+
+### Behoben
+- Footer-Buttons (GitHub, TWINT, Transivroom) auf schmalen iOS-Screens zu klein für Text: Flex-Container der Button-Row um `flex-wrap: wrap` und `justify-content: center` ergänzt — Buttons mit `white-space: nowrap` wurden von der Flex-Logik schmaler als ihr Textinhalt gedrückt, da keine Zeile umbrechen konnte
+
+---
+
 ## [1.0.5] – 2026-04-23
 
 ### Behoben

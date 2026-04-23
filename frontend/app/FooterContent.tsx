@@ -84,7 +84,7 @@ export default function FooterContent() {
       </p>
 
       {/* Links: GitHub + Ko-fi */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "1rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: "0.6rem", marginTop: "1rem" }}>
 
       {/* GitHub */}
       <a
