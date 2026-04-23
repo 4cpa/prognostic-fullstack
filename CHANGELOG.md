@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.5] – 2026-04-23
+
+### Behoben
+- Footer-Icons auf iOS definitiv unsichtbar: Alle inline `<svg>`-Elemente (E-Mail, GitHub, Ko-fi, TWINT) durch `<img src="/icons/xxx.svg">` ersetzt — gleicher Ansatz wie der funktionierende Transivroom-Button; SVG-Dateien mit fest codierten Farben in `/public/icons/` abgelegt
+
+---
+
 ## [1.0.4] – 2026-04-23
 
 ### Behoben
