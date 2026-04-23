@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.2] – 2026-04-23
+
+### Hinzugefügt
+- Twint-Spende-Button im Footer neben Ko-fi (`#0C2461`, Smartphone-Icon, persönlicher Zahlungslink)
+
+---
+
 ## [1.0.1] – 2026-04-14
 
 ### Hinzugefügt

@@ -149,6 +149,32 @@ export default function FooterContent() {
         {t.donate}
       </a>
 
+      {/* Twint Spende */}
+      <a
+        href="https://go.twint.ch/1/e/tw?tw=acq.x1hm6cyuR8u17Wn6-3sv7bblhwQU4Vf6PwXkjpR-X-HMLlMgKKzCFyPCjp7R-llu"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.35rem",
+          backgroundColor: "#0C2461",
+          color: "#fff",
+          fontSize: "0.7rem",
+          fontWeight: 700,
+          padding: "0.3rem 0.75rem",
+          borderRadius: "0.4rem",
+          textDecoration: "none",
+          letterSpacing: "0.04em",
+        }}
+      >
+        {/* TWINT brand icon: stylised phone with payment wave */}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+          <path d="M17 1H7C5.34 1 4 2.34 4 4v16c0 1.66 1.34 3 3 3h10c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-5 20c-.83 0-1.5-.67-1.5-1.5S11.17 18 12 18s1.5.67 1.5 1.5S12.83 21 12 21zm5-4H7V4h10v13z"/>
+        </svg>
+        TWINT
+      </a>
+
       {/* Transivroom */}
       <a
         href="https://www.transivroom.ch"
