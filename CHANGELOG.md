@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.7] – 2026-05-02
+
+### Hinzugefügt
+- Antwortseite: Zurück-Navigation zum Frageformular in der jeweiligen Sprache (de/en/fr/it/es) — dezenter Link oben (vor dem Titel) und prominenter CTA-Button unten (nach den Quellen)
+
+---
+
 ## [1.0.6] – 2026-04-23
 
 ### Behoben

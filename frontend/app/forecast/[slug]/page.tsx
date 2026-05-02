@@ -373,6 +373,7 @@ const T: Record<Lang, {
   noUncertainty: string;
   noSources: string;
   createdAt: string;
+  newQuestion: string;
 }> = {
   de: {
     analysis: "Analyse",
@@ -389,6 +390,7 @@ const T: Record<Lang, {
     noUncertainty: "Keine Unsicherheiten",
     noSources: "Keine Quellen vorhanden.",
     createdAt: "Forecast vom",
+    newQuestion: "Neue Frage stellen",
   },
   en: {
     analysis: "Analysis",
@@ -405,6 +407,7 @@ const T: Record<Lang, {
     noUncertainty: "No uncertainties",
     noSources: "No sources available.",
     createdAt: "Forecast from",
+    newQuestion: "Ask a new question",
   },
   fr: {
     analysis: "Analyse",
@@ -421,6 +424,7 @@ const T: Record<Lang, {
     noUncertainty: "Aucune incertitude",
     noSources: "Aucune source disponible.",
     createdAt: "Prévision du",
+    newQuestion: "Poser une nouvelle question",
   },
   it: {
     analysis: "Analisi",
@@ -437,6 +441,7 @@ const T: Record<Lang, {
     noUncertainty: "Nessuna incertezza",
     noSources: "Nessuna fonte disponibile.",
     createdAt: "Previsione del",
+    newQuestion: "Porre una nuova domanda",
   },
   es: {
     analysis: "Análisis",
@@ -453,6 +458,7 @@ const T: Record<Lang, {
     noUncertainty: "Sin incertidumbres",
     noSources: "No hay fuentes disponibles.",
     createdAt: "Pronóstico del",
+    newQuestion: "Hacer una nueva pregunta",
   },
 };
 
@@ -550,6 +556,17 @@ export default async function ForecastDetailPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+
+        {/* ── Zurück-Link ── */}
+        <div className="mb-5">
+          <a
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <span aria-hidden="true">←</span>
+            {tr.newQuestion}
+          </a>
+        </div>
 
         {/* ── Frage ── */}
         <h1 className="mb-4 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl break-words">
@@ -828,6 +845,17 @@ export default async function ForecastDetailPage({ params }: PageProps) {
             </ul>
           </section>
         )}
+
+        {/* ── Neue Frage CTA ── */}
+        <div className="mt-8 mb-4 flex justify-center">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow hover:bg-slate-700 transition-colors"
+          >
+            <span aria-hidden="true">+</span>
+            {tr.newQuestion}
+          </a>
+        </div>
 
         {/* ── Metadaten (diskret) ── */}
         <p className="text-xs text-slate-400 text-center">
