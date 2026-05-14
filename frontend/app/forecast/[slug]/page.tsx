@@ -392,7 +392,7 @@ const T: Record<Lang, {
     noSources: "Keine Quellen vorhanden.",
     createdAt: "Forecast vom",
     newQuestion: "Neue Frage stellen",
-    aiDisclaimer: "KI-Prognose mit menschlicher Redaktion. Forecasts sind Wahrscheinlichkeiten, keine Gewissheiten.",
+    aiDisclaimer: "Diese Prognose entstand durch das Zusammenspiel von KI-Analyse und menschlicher Einschätzung. Sie gibt Orientierung — nicht Sicherheit. Bleib kritisch.",
   },
   en: {
     analysis: "Analysis",
@@ -410,7 +410,7 @@ const T: Record<Lang, {
     noSources: "No sources available.",
     createdAt: "Forecast from",
     newQuestion: "Ask a new question",
-    aiDisclaimer: "AI forecast with human editorial input. Forecasts are probabilities, not certainties.",
+    aiDisclaimer: "This forecast was shaped by the interplay of AI analysis and human judgement. It offers orientation — not certainty. Stay critical.",
   },
   fr: {
     analysis: "Analyse",
@@ -428,7 +428,7 @@ const T: Record<Lang, {
     noSources: "Aucune source disponible.",
     createdAt: "Prévision du",
     newQuestion: "Poser une nouvelle question",
-    aiDisclaimer: "Prévision IA avec révision humaine. Les prévisions sont des probabilités, pas des certitudes.",
+    aiDisclaimer: "Cette prévision est née de l'interaction entre l'analyse IA et le jugement humain. Elle offre une orientation — pas une certitude. Restez critique.",
   },
   it: {
     analysis: "Analisi",
@@ -446,7 +446,7 @@ const T: Record<Lang, {
     noSources: "Nessuna fonte disponibile.",
     createdAt: "Previsione del",
     newQuestion: "Porre una nuova domanda",
-    aiDisclaimer: "Previsione IA con revisione umana. Le previsioni sono probabilità, non certezze.",
+    aiDisclaimer: "Questa previsione è nata dall'interazione tra l'analisi IA e il giudizio umano. Offre orientamento — non certezza. Mantieni uno sguardo critico.",
   },
   es: {
     analysis: "Análisis",
@@ -464,7 +464,7 @@ const T: Record<Lang, {
     noSources: "No hay fuentes disponibles.",
     createdAt: "Pronóstico del",
     newQuestion: "Hacer una nueva pregunta",
-    aiDisclaimer: "Pronóstico de IA con revisión humana. Los pronósticos son probabilidades, no certezas.",
+    aiDisclaimer: "Este pronóstico surgió de la interacción entre el análisis de IA y el juicio humano. Ofrece orientación — no certeza. Mantén una mirada crítica.",
   },
 };
 
