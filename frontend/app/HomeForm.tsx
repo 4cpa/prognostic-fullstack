@@ -231,7 +231,15 @@ export default function HomeForm() {
         }),
       });
 
-      const data = (await res.json()) as QuestionCreateResponse & { detail?: string };
+      let data: QuestionCreateResponse & { detail?: string };
+      try {
+        data = (await res.json()) as QuestionCreateResponse & { detail?: string };
+      } catch {
+        logError(`POST /api/questions → unreadable response (${res.status})`, null);
+        setError({ kind: "http", status: res.status, detail: t.errorServer(res.status) });
+        setLoading(false);
+        return;
+      }
 
       if (!res.ok) {
         const detail = data.detail ?? `HTTP ${res.status}`;
@@ -252,7 +260,7 @@ export default function HomeForm() {
       questionSlug = data.slug;
     } catch (err) {
       logError("POST /api/questions network error", err);
-      setError({ kind: "network", msg: String(err) });
+      setError({ kind: "network", msg: "" });
       setLoading(false);
       return;
     }
@@ -264,7 +272,15 @@ export default function HomeForm() {
         { method: "POST", headers: { Accept: "application/json" } },
       );
 
-      const data = (await res.json()) as ForecastCreateResponse & { detail?: string };
+      let data: ForecastCreateResponse & { detail?: string };
+      try {
+        data = (await res.json()) as ForecastCreateResponse & { detail?: string };
+      } catch {
+        logError(`POST /api/questions/${questionId}/forecast → unreadable response (${res.status})`, null);
+        setError({ kind: "http", status: res.status, detail: t.errorServer(res.status) });
+        setLoading(false);
+        return;
+      }
 
       if (!res.ok) {
         const detail = data.detail ?? `HTTP ${res.status}`;
@@ -277,7 +293,7 @@ export default function HomeForm() {
       forecastSlug = data.question?.slug ?? data.question?.id ?? null;
     } catch (err) {
       logError(`POST /api/questions/${questionId}/forecast network error`, err);
-      setError({ kind: "network", msg: String(err) });
+      setError({ kind: "network", msg: "" });
       setLoading(false);
       return;
     }
@@ -307,7 +323,7 @@ export default function HomeForm() {
     error == null
       ? null
       : error.kind === "network"
-      ? error.msg
+      ? (error.msg || null)
       : error.detail;
 
   return (
