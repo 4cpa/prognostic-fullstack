@@ -374,6 +374,7 @@ const T: Record<Lang, {
   noSources: string;
   createdAt: string;
   newQuestion: string;
+  aiDisclaimer: string;
 }> = {
   de: {
     analysis: "Analyse",
@@ -391,6 +392,7 @@ const T: Record<Lang, {
     noSources: "Keine Quellen vorhanden.",
     createdAt: "Forecast vom",
     newQuestion: "Neue Frage stellen",
+    aiDisclaimer: "KI-Prognose mit menschlicher Redaktion. Forecasts sind Wahrscheinlichkeiten, keine Gewissheiten.",
   },
   en: {
     analysis: "Analysis",
@@ -408,6 +410,7 @@ const T: Record<Lang, {
     noSources: "No sources available.",
     createdAt: "Forecast from",
     newQuestion: "Ask a new question",
+    aiDisclaimer: "AI forecast with human editorial input. Forecasts are probabilities, not certainties.",
   },
   fr: {
     analysis: "Analyse",
@@ -425,6 +428,7 @@ const T: Record<Lang, {
     noSources: "Aucune source disponible.",
     createdAt: "Prévision du",
     newQuestion: "Poser une nouvelle question",
+    aiDisclaimer: "Prévision IA avec révision humaine. Les prévisions sont des probabilités, pas des certitudes.",
   },
   it: {
     analysis: "Analisi",
@@ -442,6 +446,7 @@ const T: Record<Lang, {
     noSources: "Nessuna fonte disponibile.",
     createdAt: "Previsione del",
     newQuestion: "Porre una nuova domanda",
+    aiDisclaimer: "Previsione IA con revisione umana. Le previsioni sono probabilità, non certezze.",
   },
   es: {
     analysis: "Análisis",
@@ -459,6 +464,7 @@ const T: Record<Lang, {
     noSources: "No hay fuentes disponibles.",
     createdAt: "Pronóstico del",
     newQuestion: "Hacer una nueva pregunta",
+    aiDisclaimer: "Pronóstico de IA con revisión humana. Los pronósticos son probabilidades, no certezas.",
   },
 };
 
@@ -572,6 +578,12 @@ export default async function ForecastDetailPage({ params }: PageProps) {
         <h1 className="mb-4 text-2xl font-bold leading-snug tracking-tight text-slate-950 sm:text-3xl break-words">
           {questionText}
         </h1>
+
+        {/* ── KI-Disclaimer ── */}
+        <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          <span aria-hidden="true" className="mt-0.5 shrink-0 text-amber-500">⚠</span>
+          <p>{tr.aiDisclaimer}</p>
+        </div>
 
         {/* ── Sprachauswahl ── */}
         <LanguageSwitcher questionId={question.id} currentLanguage={language} />
