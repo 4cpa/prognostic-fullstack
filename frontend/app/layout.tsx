@@ -76,6 +76,7 @@ export const metadata: Metadata = {
 
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon-16x16.png?v=2", type: "image/png", sizes: "16x16" },
       { url: "/favicon-32x32.png?v=2", type: "image/png", sizes: "32x32" },
       { url: "/favicon-48x48.png?v=2", type: "image/png", sizes: "48x48" },
@@ -84,7 +85,7 @@ export const metadata: Metadata = {
     apple: [
       { url: "/apple-touch-icon.png?v=2", sizes: "180x180", type: "image/png" },
     ],
-    shortcut: "/favicon-32x32.png?v=2",
+    shortcut: "/favicon.ico",
   },
 
   category: "technology",
