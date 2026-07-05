@@ -67,6 +67,25 @@ docker compose up -d --build frontend
 
 ---
 
+## Cloudflare & Origin-Firewall
+
+Seit 2026-07 läuft die Produktionsumgebung hinter Cloudflare als Hybrid-Proxy (DNS, SSL/TLS „Full (strict)", WAF/DDoS-Schutz). Mail-Records (MX/SPF/DMARC/DKIM zu Infomaniak) sind bewusst auf „Nur DNS" belassen und dürfen nicht proxied werden.
+
+Origin-Härtung:
+- **Hetzner Cloud Firewall** (nicht ufw/iptables auf dem Server): Port 80/443 nur für aktuelle Cloudflare-IP-Ranges offen, Port 22 (SSH) unbeschränkt. Die zuvor direkt erreichbaren Ports 3000/8000 wurden entfernt.
+- **Nginx** (`/etc/nginx/conf.d/cloudflare-realip.conf`): `real_ip`-Modul, damit Access-Logs/Netdata echte Besucher-IPs statt Cloudflare-Edge-IPs zeigen.
+
+Cloudflare ändert seine IP-Ranges gelegentlich. Zwei Cronjobs auf dem VPS halten beide Stellen automatisch synchron:
+
+| Cronjob                          | Schedule          | Script                                          | Log                                       |
+|-----------------------------------|-------------------|--------------------------------------------------|--------------------------------------------|
+| `/etc/cron.d/cloudflare-ip-update` | Mo 04:15 UTC       | `/usr/local/sbin/update-cloudflare-ips.sh`       | `/var/log/cloudflare-ip-update.log`         |
+| `/etc/cron.d/hetzner-firewall-update` | Mo 04:30 UTC   | `/usr/local/sbin/update-hetzner-firewall.py`     | `/var/log/hetzner-firewall-update.log`      |
+
+Beide Scripts sind idempotent (kein Reload/API-Call ohne echte Änderung) und brechen bei ungültiger Config bzw. drohendem Verlust der SSH-Regel ohne jede Änderung ab. Das Hetzner-Script benötigt ein API-Token unter `/etc/hetzner-api-token` (root:root, chmod 600) — Token liegt nur auf dem Server, nirgendwo im Repo oder in CI-Secrets.
+
+---
+
 ## Datenbankmigrationen
 
 Migrationen werden **nicht** automatisch ausgeführt. Nach Schemaänderungen manuell:

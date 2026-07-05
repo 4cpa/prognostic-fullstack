@@ -10,6 +10,24 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0] – 2026-07-06
+
+### Hinzugefügt
+- Cloudflare als Hybrid-Proxy vor die Produktionsumgebung geschaltet: DNS-Verwaltung über Cloudflare-Nameserver, SSL/TLS-Modus „Full (strict)", WAF/DDoS-Schutz auf Netzwerkebene
+- Automatisierte wöchentliche Aktualisierung der Cloudflare-IP-Ranges via Cronjobs auf dem VPS — sowohl für die Nginx-`real_ip`-Konfiguration als auch für die Hetzner-Cloud-Firewall-Regeln (über die Hetzner-API, mit eingebauter Sicherung gegen versehentliches Entfernen der SSH-Regel)
+- KI-Disclaimer-Banner auf der Forecast-Detailseite
+
+### Geändert
+- Origin-Firewall (Hetzner Cloud) lässt eingehenden Traffic auf Port 80/443 nur noch von Cloudflare-IP-Ranges zu; die zuvor öffentlich erreichbaren Ports 3000 (Frontend) und 8000 (Backend) wurden komplett entfernt, da Nginx diese ohnehin nur intern proxyt und sie sonst Cloudflare und Nginx umgehen konnten
+- Nginx: `real_ip`-Modul aktiviert, damit Access-Logs und das Netdata-Monitoring wieder die echten Besucher-IPs statt Cloudflare-Edge-IPs anzeigen
+- KI-Disclaimer-Text wärmer und nuancierter formuliert (Variante 3)
+
+### Behoben
+- Rohe `SyntaxError`-Meldung wurde bei fehlerhaftem JSON-Parsing direkt an den User durchgereicht statt einer verständlichen Fehlermeldung
+- Favicon-Darstellung in Safari: Next.js-Standard-Favicon durch 4cpa-Logo ersetzt, Cache-Refresh erzwungen (`?v=2`), zusätzliches `favicon.ico` in `app/` für höchste Next.js-Priorität ergänzt
+
+---
+
 ## [1.0.7] – 2026-05-02
 
 ### Hinzugefügt
@@ -139,7 +157,8 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/4cpa/prognostic-fullstack/compare/v1.0.0...v1.1.0
 [0.4.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.1.0...v0.2.0

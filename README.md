@@ -41,6 +41,10 @@ Sprachen: Deutsch, Englisch, Französisch, Italienisch, Spanisch.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
+│      Cloudflare (DNS, SSL Full-strict, WAF/DDoS)         │
+└────────────────────────────┬─────────────────────────────┘
+                             │  Origin-Firewall: nur Cloudflare-IPs
+┌────────────────────────────▼─────────────────────────────┐
 │                      Nginx (Reverse Proxy)               │
 └────────────────┬──────────────────────┬─────────────────┘
                  │                      │
@@ -57,7 +61,7 @@ Sprachen: Deutsch, Englisch, Französisch, Italienisch, Spanisch.
                       └──────────────────────┘
 ```
 
-Alle Services laufen als Docker-Container und kommunizieren über ein internes Docker-Netzwerk.
+Alle Services laufen als Docker-Container und kommunizieren über ein internes Docker-Netzwerk. Eingehender Traffic auf Port 80/443 wird auf Infrastruktur-Ebene (Hetzner Cloud Firewall) ausschließlich von Cloudflare-IP-Ranges akzeptiert; die Ranges werden per Cronjob automatisch aktuell gehalten (siehe `DEPLOYMENT.md`).
 
 ---
 
@@ -378,7 +382,7 @@ Drei Workflows laufen bei jedem Push auf `main`:
 
 ### Systemmetriken: Netdata
 
-Netdata läuft bereits auf dem Server und überwacht CPU, RAM, Disk, Network.
+Netdata läuft bereits auf dem Server und überwacht CPU, RAM, Disk, Network. Dashboard erreichbar über `monitor.4cpa.org` (Nginx-Proxy mit Basic-Auth, hinter Cloudflare). Nginx nutzt das `real_ip`-Modul, damit Netdata trotz Cloudflare-Proxy die echten Besucher-IPs sieht statt Cloudflare-Edge-IPs.
 
 ### Endpoint-Monitoring: Uptime Kuma
 
