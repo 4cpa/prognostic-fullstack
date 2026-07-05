@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.1] – 2026-07-06
+
+### Behoben
+- Scoring-Bug: Der „Directional-Imbalance-Bonus" (bis zu +20% bei einseitiger Pro/Contra-Evidenz) konnte die Uncertainty-Dämpfung überkompensieren, wodurch Unsicherheits-Claims das `net_signal` paradoxerweise erhöhten statt zu senken (`test_uncertainty_claims_reduce_effective_net_signal`, seit 2026-05-14 durchgehend rot). Der Bonus greift jetzt nur noch, wenn keine nennenswerte Unsicherheit vorliegt — bei vorhandener Unsicherheit hat die Vorsichts-Dämpfung Vorrang.
+
+---
+
 ## [1.1.0] – 2026-07-06
 
 ### Hinzugefügt
@@ -157,7 +164,8 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/4cpa/prognostic-fullstack/compare/v1.0.0...v1.1.0
 [0.4.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.2.0...v0.3.0

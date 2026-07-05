@@ -278,15 +278,20 @@ def score_claims(
     uncertainty_drag = min(0.35, uncertainty_weight_sum * 0.10)
 
     # Directional-Imbalance-Bonus: wenn >65% des gerichteten Gewichts auf einer Seite liegen,
-    # wird das Nettosignal um bis zu 20% verstärkt — damit klare Evidenz nicht zur Mitte gezogen wird
-    directional_total = pro_weight_sum + contra_weight_sum
-    if directional_total > 1e-6:
-        imbalance_ratio = abs(raw_net) / directional_total  # 0.0 (gleichgewichtig) bis 1.0 (einseitig)
-        if imbalance_ratio > 0.65:
-            imbalance_bonus = (imbalance_ratio - 0.65) / 0.35 * 0.20  # 0 bis 0.20
-            raw_net = raw_net * (1.0 + imbalance_bonus)
-
-    net_signal = round(raw_net * (1.0 - uncertainty_drag), 4)
+    # wird das Nettosignal um bis zu 20% verstärkt — damit klare Evidenz nicht zur Mitte gezogen wird.
+    # Der Bonus gilt nur, solange keine nennenswerte Unsicherheit vorliegt: sonst könnte er die
+    # Uncertainty-Dämpfung überkompensieren und Unsicherheit würde das Signal paradoxerweise erhöhen
+    # statt zu senken.
+    if uncertainty_drag > 0:
+        net_signal = round(raw_net * (1.0 - uncertainty_drag), 4)
+    else:
+        imbalance_bonus = 0.0
+        directional_total = pro_weight_sum + contra_weight_sum
+        if directional_total > 1e-6:
+            imbalance_ratio = abs(raw_net) / directional_total  # 0.0 (gleichgewichtig) bis 1.0 (einseitig)
+            if imbalance_ratio > 0.65:
+                imbalance_bonus = (imbalance_ratio - 0.65) / 0.35 * 0.20  # 0 bis 0.20
+        net_signal = round(raw_net * (1.0 + imbalance_bonus), 4)
 
     diagnostics = {
         "claim_count_input": len(claims),
