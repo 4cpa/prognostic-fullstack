@@ -27,6 +27,8 @@ log = logging.getLogger("tests")
 @pytest.fixture(scope="session")
 def engine():
     """SQLite-In-Memory-Engine für die gesamte Test-Session."""
+    import app.main  # noqa: F401 — registriert alle SQLModel-Tabellen vor create_all
+
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},

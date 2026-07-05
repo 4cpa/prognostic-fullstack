@@ -10,6 +10,14 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.2] – 2026-07-06
+
+### Behoben
+- Integrationstests liefen nie erfolgreich durch: `tests/conftest.py` rief `SQLModel.metadata.create_all()` auf, bevor die App-Modelle importiert waren, wodurch die SQLite-Test-DB ohne Tabellen blieb ("no such table: questions"). Dieser Fehler war bisher verdeckt, weil ein vorheriger Unit-Test-Fehler (siehe 1.1.1) die CI-Pipeline schon vorher gestoppt hat.
+- `EvidenceItem.direction` (manuelle Evidenz-Einträge) war als `int` (-1/+1) modelliert, während README und API-Konsumenten den dokumentierten Vertrag `str` (`pro`/`contra`/`uncertainty`) erwarten — jeder spezifikationskonforme Aufruf von `POST /questions/{id}/evidence` schlug mit 422 fehl. Model auf `str` korrigiert, inkl. Alembic-Migration für die bestehende Postgres-Spalte (`direction`: `INTEGER` → `VARCHAR`, vorhandene Werte `1`/`-1` werden zu `pro`/`contra` migriert). **Migration muss nach dem Deploy manuell mit `alembic upgrade head` auf dem Server angewendet werden** (siehe DEPLOYMENT.md).
+
+---
+
 ## [1.1.1] – 2026-07-06
 
 ### Behoben
@@ -164,7 +172,8 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/4cpa/prognostic-fullstack/compare/v1.0.0...v1.1.0
 [0.4.0]: https://github.com/4cpa/prognostic-fullstack/compare/v0.3.0...v0.4.0

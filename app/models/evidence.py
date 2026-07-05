@@ -9,7 +9,7 @@ from sqlmodel import SQLModel, Field
 
 class EvidenceCreate(SQLModel):
     indicator_type: str
-    direction: int  # -1 or +1
+    direction: str  # "pro" / "contra" / "uncertainty"
     weight: float
     note: Optional[str] = None
 
@@ -19,7 +19,7 @@ class EvidenceRead(SQLModel):
     question_id: str
     created_at: datetime
     indicator_type: str
-    direction: int
+    direction: str
     weight: float
     note: Optional[str] = None
 
@@ -33,6 +33,6 @@ class EvidenceItem(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     indicator_type: str
-    direction: int
+    direction: str
     weight: float
     note: Optional[str] = None
