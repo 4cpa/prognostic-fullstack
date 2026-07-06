@@ -86,6 +86,12 @@ Beide Scripts sind idempotent (kein Reload/API-Call ohne echte Änderung) und br
 
 ---
 
+## Netdata: Postgres-Collector deaktiviert
+
+`/etc/netdata/go.d.conf` enthält `postgres: no`. Der `go.d`-Postgres-Collector erkennt automatisch den lokal lauschenden Postgres auf `127.0.0.1:5432` und versucht sich mit dem Default-User `netdata` zu verbinden — diese Rolle existiert in der App-Datenbank nicht (nur `prognostic`), was zu täglichen `password authentication failed`-Einträgen im Postgres-Log führte. System-Metriken (CPU/RAM/Disk) und App-Metriken (Prometheus `/metrics`) sind davon nicht betroffen.
+
+---
+
 ## Datenbankmigrationen
 
 Migrationen werden **nicht** automatisch ausgeführt. Nach Schemaänderungen manuell:

@@ -10,6 +10,13 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.3] – 2026-07-06
+
+### Behoben
+- Netdata versuchte täglich, sich über den `go.d`-Postgres-Collector mit dem Standard-User `netdata` an der App-Postgres-Instanz anzumelden — diese Rolle existiert dort nicht (nur `prognostic`), was seit 2026-06-24 zu einem täglichen `password authentication failed`-Eintrag im Postgres-Log führte. Collector über `/etc/netdata/go.d.conf` (`postgres: no`) deaktiviert; System- und App-Metriken (Netdata bzw. Prometheus `/metrics`) sind davon unberührt.
+
+---
+
 ## [1.1.2] – 2026-07-06
 
 ### Behoben
@@ -172,7 +179,8 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/4cpa/prognostic-fullstack/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/4cpa/prognostic-fullstack/compare/v1.0.0...v1.1.0
