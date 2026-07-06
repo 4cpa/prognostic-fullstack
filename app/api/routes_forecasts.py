@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from app.core.forecast_engine import generate_forecast
 from app.core.db import get_session
 from app.core.logger import get_logger
+from app.core.progress_tracker import get_stage
 from app.models import Forecast, Question
 
 log = get_logger("routes.forecasts")
@@ -225,6 +226,17 @@ def create_forecast(
         "question": _question_to_dict(question),
         "forecast": _forecast_model_to_summary_dict(forecast),
     }
+
+
+@router.get("/{question_id}/forecast/progress")
+def get_forecast_progress(question_id: str) -> Dict[str, Any]:
+    """Polled by the frontend while a forecast is being generated.
+
+    Backed by an in-memory dict (app/core/progress_tracker.py), not the DB —
+    there's nothing to persist here, it's just a live status for the UI.
+    """
+    stage = get_stage(question_id)
+    return stage or {"stage": "idle"}
 
 
 @router.get("/{question_id}/forecast/latest")

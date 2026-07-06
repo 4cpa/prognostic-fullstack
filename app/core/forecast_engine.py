@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
@@ -7,6 +8,7 @@ import math
 import re
 
 from app.core.logger import get_logger
+from app.core.progress_tracker import clear_stage, set_stage
 
 _log = get_logger("forecast_engine")
 
@@ -952,6 +954,34 @@ def _apply_runtime_calibration_payload(
     return calibrated_probability, signals
 
 
+def _estimate_base_rate_safe(question_text: str, default_prior: float) -> tuple[float, Optional[str]]:
+    try:
+        from app.core.llm_service import estimate_base_rate as _estimate_base_rate
+        prior_probability = _estimate_base_rate(question_text)
+        base_rate_reference_class = f"LLM-estimated base rate: {round(prior_probability * 100, 1)}%"
+        _log.info("base_rate_prior=%.3f question=%r", prior_probability, question_text[:80])
+        return prior_probability, base_rate_reference_class
+    except Exception as exc:
+        _log.warning("estimate_base_rate fehlgeschlagen, fallback auf %.2f: %s", default_prior, exc)
+        return default_prior, None
+
+
+def _generate_explanation_safe(**kwargs: Any) -> str:
+    try:
+        from app.core.llm_service import generate_forecast_explanation
+        return generate_forecast_explanation(**kwargs) or ""
+    except Exception:
+        return ""
+
+
+def _generate_direct_answer_safe(**kwargs: Any) -> dict[str, Any]:
+    try:
+        from app.core.llm_service import generate_direct_answer
+        return generate_direct_answer(**kwargs) or {}
+    except Exception:
+        return {}
+
+
 class ForecastEngine:
     def __init__(self, config: Optional[EngineConfig] = None) -> None:
         self.config = config or EngineConfig()
@@ -967,64 +997,79 @@ class ForecastEngine:
         question_text = _question_text(question)
         question_description = _question_description(question)
         category = category or _question_category(question)
+        question_id = getattr(question, "id", None)
 
-        # LLM-Basisrate als Prior: ersetzt festes 0.50 durch historisch kalibrierte Häufigkeit
-        prior_probability = self.config.prior_probability
-        base_rate_reference_class = None
         try:
-            from app.core.llm_service import estimate_base_rate as _estimate_base_rate
-            prior_probability = _estimate_base_rate(question_text)
-            base_rate_reference_class = f"LLM-estimated base rate: {round(prior_probability * 100, 1)}%"
-            _log.info("base_rate_prior=%.3f question=%r", prior_probability, question_text[:80])
-        except Exception as exc:
-            _log.warning("estimate_base_rate fehlgeschlagen, fallback auf %.2f: %s", prior_probability, exc)
+            # LLM-Basisrate (Prior) und Quellenrecherche sind unabhängig voneinander
+            # (research_sources() nutzt `session` nicht) und laufen daher parallel.
+            set_stage(question_id, "research")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                base_rate_future = executor.submit(
+                    _estimate_base_rate_safe, question_text, self.config.prior_probability
+                )
+                sources_future = executor.submit(
+                    _call_research_sources,
+                    question_text=question_text,
+                    question_description=question_description,
+                    session=session,
+                    config=self.config,
+                )
+                prior_probability, base_rate_reference_class = base_rate_future.result()
+                sources = sources_future.result()
 
-        sources = _call_research_sources(
-            question_text=question_text,
-            question_description=question_description,
-            session=session,
-            config=self.config,
-        )
-        sources = sources[: self.config.max_sources]
+            sources = sources[: self.config.max_sources]
 
-        extracted_claims = _call_extract_claims(question_text, sources=sources, session=session)
-        scored_claims = _call_score_claims(extracted_claims, question_text=question_text, session=session)
-        claims = [_claim_to_dict(item, question_text=question_text) for item in scored_claims][: self.config.max_claims]
+            set_stage(question_id, "analysis")
+            extracted_claims = _call_extract_claims(question_text, sources=sources, session=session)
+            scored_claims = _call_score_claims(extracted_claims, question_text=question_text, session=session)
+            claims = [_claim_to_dict(item, question_text=question_text) for item in scored_claims][: self.config.max_claims]
 
-        raw_probability, probability_diagnostics = _compute_probability_from_claims(
-            claims,
-            prior_probability=prior_probability,
-        )
-        if base_rate_reference_class:
-            probability_diagnostics["base_rate_source"] = base_rate_reference_class
-
-        runtime_calibration_meta = _get_runtime_calibration_payload(session=session, category=category)
-        calibrated_probability, calibration_signals = _apply_runtime_calibration_payload(
-            raw_probability=raw_probability,
-            runtime_calibration_meta=runtime_calibration_meta,
-        )
-
-        confidence = _compute_confidence(claims, config=self.config)
-        top_pro_claims, top_contra_claims, top_uncertainties = _top_claim_buckets(
-            claims,
-            per_bucket=self.config.top_claims_per_bucket,
-        )
-
-        # LLM-Erklärung: Claude generiert eine natürlichsprachliche Analyse
-        llm_explanation = ""
-        try:
-            from app.core.llm_service import generate_forecast_explanation
-            llm_explanation = generate_forecast_explanation(
-                question_text=question_text,
-                probability=calibrated_probability,
-                top_pro_claims=top_pro_claims,
-                top_contra_claims=top_contra_claims,
-                top_uncertainties=top_uncertainties,
-                sources=sources,
-                language=language,
+            raw_probability, probability_diagnostics = _compute_probability_from_claims(
+                claims,
+                prior_probability=prior_probability,
             )
-        except Exception:
-            pass
+            if base_rate_reference_class:
+                probability_diagnostics["base_rate_source"] = base_rate_reference_class
+
+            runtime_calibration_meta = _get_runtime_calibration_payload(session=session, category=category)
+            calibrated_probability, calibration_signals = _apply_runtime_calibration_payload(
+                raw_probability=raw_probability,
+                runtime_calibration_meta=runtime_calibration_meta,
+            )
+
+            confidence = _compute_confidence(claims, config=self.config)
+            top_pro_claims, top_contra_claims, top_uncertainties = _top_claim_buckets(
+                claims,
+                per_bucket=self.config.top_claims_per_bucket,
+            )
+
+            # LLM-Erklärung und LLM-Direktantwort hängen beide nur von
+            # calibrated_probability/top_claims ab, nicht voneinander — daher parallel.
+            set_stage(question_id, "writing")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                explanation_future = executor.submit(
+                    _generate_explanation_safe,
+                    question_text=question_text,
+                    probability=calibrated_probability,
+                    top_pro_claims=top_pro_claims,
+                    top_contra_claims=top_contra_claims,
+                    top_uncertainties=top_uncertainties,
+                    sources=sources,
+                    language=language,
+                )
+                direct_answer_future = executor.submit(
+                    _generate_direct_answer_safe,
+                    question_text=question_text,
+                    probability=calibrated_probability,
+                    top_pro_claims=top_pro_claims,
+                    top_contra_claims=top_contra_claims,
+                    top_uncertainties=top_uncertainties,
+                    language=language,
+                )
+                llm_explanation = explanation_future.result()
+                direct_answer_payload = direct_answer_future.result()
+        finally:
+            clear_stage(question_id)
 
         if llm_explanation:
             explanation_md = llm_explanation
@@ -1051,19 +1096,6 @@ class ForecastEngine:
                 top_uncertainties=top_uncertainties,
                 runtime_calibration_meta=runtime_calibration_meta,
             )
-
-        try:
-            from app.core.llm_service import generate_direct_answer
-            direct_answer_payload = generate_direct_answer(
-                question_text=question_text,
-                probability=calibrated_probability,
-                top_pro_claims=top_pro_claims,
-                top_contra_claims=top_contra_claims,
-                top_uncertainties=top_uncertainties,
-                language=language,
-            )
-        except Exception:
-            direct_answer_payload = {}
 
         if not direct_answer_payload.get("direct_answer"):
             direct_answer_payload = build_direct_answer(

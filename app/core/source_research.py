@@ -11,7 +11,7 @@ import re
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
@@ -1506,13 +1506,23 @@ def _fetch_candidates(question_text: str) -> List[ResearchSource]:
         return []
 
     raw_items: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    executor = ThreadPoolExecutor(max_workers=16)
+    try:
         futures = [executor.submit(_search, task) for task in search_tasks]
-        for future in as_completed(futures, timeout=REQUEST_TIMEOUT + 5):
-            try:
-                raw_items.extend(future.result())
-            except Exception:
-                pass
+        try:
+            for future in as_completed(futures, timeout=REQUEST_TIMEOUT + 5):
+                try:
+                    raw_items.extend(future.result())
+                except Exception:
+                    pass
+        except FutureTimeoutError:
+            # Some searches are still running past the budget — keep whatever
+            # results already came in instead of blocking on the stragglers.
+            pass
+    finally:
+        # wait=False + cancel_futures drops not-yet-started tasks immediately
+        # instead of letting __exit__ block on every submitted thread.
+        executor.shutdown(wait=False, cancel_futures=True)
 
     normalized: List[ResearchSource] = []
     for item in raw_items:

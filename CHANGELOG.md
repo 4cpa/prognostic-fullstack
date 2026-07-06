@@ -10,6 +10,17 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.4] – 2026-07-06
+
+### Geändert
+- Forecast-Berechnung beschleunigt: Die LLM-Basisratenschätzung läuft jetzt parallel zur Quellenrecherche, und die beiden abschließenden LLM-Aufrufe (Erklärung + Direktantwort) laufen ebenfalls parallel statt nacheinander — beide Paare sind voneinander unabhängig, sodass ein kompletter LLM-Roundtrip pro Forecast eingespart wird.
+- Sichtbares Fortschritts-Feedback beim Warten auf einen Forecast: Statt eines kaum sichtbaren, ausgegrauten Mini-Spinners zeigt das Formular jetzt eine deutlich sichtbare, drehende Uhr mit Live-Statustext ("Quellen werden durchsucht…" → "Belege werden bewertet…" → "Erklärung wird formuliert…"), gespeist durch einen neuen Backend-Endpoint (`GET /questions/{id}/forecast/progress`), der den echten Fortschritt der laufenden Berechnung zurückgibt.
+
+### Behoben
+- `_fetch_candidates()` (Quellenrecherche) wartete beim Verlassen des `ThreadPoolExecutor`-Blocks trotz abgelaufenem 17s-Timeout weiter auf alle bereits gestarteten Threads (`shutdown(wait=True)` im impliziten `with`-Exit) und liess bei Timeout sogar eine unbehandelte Exception durchschlagen, statt mit den bis dahin gesammelten Treffern weiterzumachen. Der Timeout wird jetzt tatsächlich durchgesetzt (`shutdown(wait=False, cancel_futures=True)`), und ein Timeout führt zu einem Teilergebnis statt zu einem Fehler.
+
+---
+
 ## [1.1.3] – 2026-07-06
 
 ### Behoben

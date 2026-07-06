@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useLanguage, type LangCode } from "./language-context";
@@ -39,6 +39,7 @@ const UI: Record<
     submitting: string;
     submitAriaLoading: string;
     submitAriaIdle: string;
+    progressStages: string[];
     errorNotFound: string;
     errorServer: (status: number) => string;
     errorNetwork: string;
@@ -62,6 +63,12 @@ const UI: Record<
     submitting: "Forecast wird berechnet, bitte warten…",
     submitAriaLoading: "Forecast wird berechnet…",
     submitAriaIdle: "Forecast erzeugen",
+    progressStages: [
+      "Aktuelle Quellen werden durchsucht…",
+      "Belege werden extrahiert und bewertet…",
+      "Wahrscheinlichkeit wird von der KI berechnet…",
+      "Erklärung und Antwort werden formuliert — fast fertig…",
+    ],
     errorNotFound: "Ressource nicht gefunden (404)",
     errorServer: (s) => `Serverfehler (${s})`,
     errorNetwork: "Verbindungsfehler",
@@ -88,6 +95,12 @@ const UI: Record<
     submitting: "Calculating forecast, please wait…",
     submitAriaLoading: "Calculating forecast…",
     submitAriaIdle: "Generate forecast",
+    progressStages: [
+      "Searching current sources…",
+      "Extracting and scoring evidence…",
+      "AI is calculating the probability…",
+      "Writing the explanation and answer — almost done…",
+    ],
     errorNotFound: "Resource not found (404)",
     errorServer: (s) => `Server error (${s})`,
     errorNetwork: "Connection error",
@@ -114,6 +127,12 @@ const UI: Record<
     submitting: "Calcul de la prévision en cours…",
     submitAriaLoading: "Calcul en cours…",
     submitAriaIdle: "Générer la prévision",
+    progressStages: [
+      "Recherche des sources actuelles…",
+      "Extraction et évaluation des preuves…",
+      "L'IA calcule la probabilité…",
+      "Rédaction de l'explication et de la réponse — presque terminé…",
+    ],
     errorNotFound: "Ressource introuvable (404)",
     errorServer: (s) => `Erreur serveur (${s})`,
     errorNetwork: "Erreur de connexion",
@@ -140,6 +159,12 @@ const UI: Record<
     submitting: "Calcolo previsione in corso…",
     submitAriaLoading: "Calcolo in corso…",
     submitAriaIdle: "Genera previsione",
+    progressStages: [
+      "Ricerca delle fonti attuali…",
+      "Estrazione e valutazione delle prove…",
+      "L'IA calcola la probabilità…",
+      "Redazione della spiegazione e della risposta — quasi pronto…",
+    ],
     errorNotFound: "Risorsa non trovata (404)",
     errorServer: (s) => `Errore server (${s})`,
     errorNetwork: "Errore di connessione",
@@ -166,6 +191,12 @@ const UI: Record<
     submitting: "Calculando predicción, por favor espera…",
     submitAriaLoading: "Calculando predicción…",
     submitAriaIdle: "Generar predicción",
+    progressStages: [
+      "Buscando fuentes actuales…",
+      "Extrayendo y evaluando evidencias…",
+      "La IA está calculando la probabilidad…",
+      "Redactando la explicación y la respuesta — casi listo…",
+    ],
     errorNotFound: "Recurso no encontrado (404)",
     errorServer: (s) => `Error del servidor (${s})`,
     errorNetwork: "Error de conexión",
@@ -190,6 +221,29 @@ function resolveAtOneYear(): string {
   return d.toISOString();
 }
 
+function ClockSpinner({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="12" cy="12" r="9.25" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
+      <g style={{ transformOrigin: "12px 12px" }} className="animate-spin">
+        <line x1="12" y1="12" x2="12" y2="6.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+        <line x1="12" y1="12" x2="15.5" y2="12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" opacity="0.7" />
+      </g>
+    </svg>
+  );
+}
+
+// Maps the backend's real generation stage (app/core/progress_tracker.py) to
+// an index into UI.progressStages. "idle" means either "not started yet" or
+// "just finished" — we distinguish those by whichever stage we saw last.
+const STAGE_INDEX: Record<string, number> = { research: 0, analysis: 1, writing: 2 };
+
 function logError(context: string, err: unknown) {
   const ts = new Date().toISOString();
   console.error(`[${ts}] [HomeForm] ${context}`, err);
@@ -201,6 +255,8 @@ export default function HomeForm() {
   const { language, setLanguage } = useLanguage();
   const [error, setError] = useState<AppError | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progressStage, setProgressStage] = useState(0);
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
 
   const t = UI[language];
 
@@ -208,6 +264,45 @@ export default function HomeForm() {
   const errorId = useId();
   const statusId = useId();
   const liveRef = useRef<HTMLDivElement>(null);
+
+  // Poll the backend's real generation stage while loading so the wait
+  // narrates actual progress instead of just showing a spinner.
+  useEffect(() => {
+    if (!loading) {
+      setProgressStage(0);
+      setActiveQuestionId(null);
+      return;
+    }
+    if (!activeQuestionId) return;
+
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/questions/${activeQuestionId}/forecast/progress`, {
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        const data = (await res.json()) as { stage?: string };
+        if (cancelled) return;
+        setProgressStage((prev) => {
+          const stage = data.stage;
+          if (stage && stage in STAGE_INDEX) return STAGE_INDEX[stage];
+          if (stage === "idle" && prev >= STAGE_INDEX.writing) return 3;
+          return prev;
+        });
+      } catch {
+        // transient polling error — keep showing the last known stage
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [loading, activeQuestionId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -258,6 +353,7 @@ export default function HomeForm() {
 
       questionId = data.id;
       questionSlug = data.slug;
+      setActiveQuestionId(questionId);
     } catch (err) {
       logError("POST /api/questions network error", err);
       setError({ kind: "network", msg: "" });
@@ -400,19 +496,14 @@ export default function HomeForm() {
             type="submit"
             disabled={!question.trim() || loading}
             aria-label={loading ? t.submitAriaLoading : t.submitAriaIdle}
-            className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            className={`absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-xl text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+              loading
+                ? "bg-slate-700 cursor-wait"
+                : "bg-slate-900 hover:bg-slate-700 disabled:opacity-30"
+            }`}
           >
             {loading ? (
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
+              <ClockSpinner className="h-5 w-5" />
             ) : (
               <svg
                 className="h-4 w-4"
@@ -428,6 +519,16 @@ export default function HomeForm() {
             )}
           </button>
         </div>
+
+        {loading && (
+          <div
+            role="status"
+            className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+          >
+            <ClockSpinner className="h-5 w-5 shrink-0 text-slate-500" />
+            <span>{t.progressStages[progressStage]}</span>
+          </div>
+        )}
 
         <fieldset className="mt-4 border-0 p-0">
           <legend className="mb-2 text-xs font-medium text-slate-600">
